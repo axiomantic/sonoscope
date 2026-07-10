@@ -1,0 +1,22 @@
+[
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_on", "channel": 3, "note": 50, "velocity": 100, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 96, "t_samples": 2400},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 480, "t_samples": 12000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 576, "t_samples": 14400},
+  {"type": "note_off", "channel": 3, "note": 50, "velocity": 0, "t_ticks": 720, "t_samples": 18000},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 960, "t_samples": 24000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 1056, "t_samples": 26400},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 1440, "t_samples": 36000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 1536, "t_samples": 38400},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 1920, "t_samples": 48000},
+  {"type": "note_on", "channel": 3, "note": 50, "velocity": 100, "t_ticks": 1920, "t_samples": 48000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 2016, "t_samples": 50400},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 2400, "t_samples": 60000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 2496, "t_samples": 62400},
+  {"type": "note_off", "channel": 3, "note": 50, "velocity": 0, "t_ticks": 2640, "t_samples": 66000},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 2880, "t_samples": 72000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 2976, "t_samples": 74400},
+  {"type": "note_on", "channel": 9, "note": 42, "velocity": 80, "t_ticks": 3360, "t_samples": 84000},
+  {"type": "note_off", "channel": 9, "note": 42, "velocity": 0, "t_ticks": 3456, "t_samples": 86400}
+]

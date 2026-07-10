@@ -1,0 +1,80 @@
+name: CI
+
+# Runs the deterministic-core (non-integration) test suite on every PR and on
+# pushes to main so main stays green.
+#
+# Integration tests (@pytest.mark.integration, AGENTS.md "Testing discipline")
+# require external artifacts NOT present on a CI runner -- Surge XT, the spike
+# wrapped-VST3, and the ~16 GB Qwen2-Audio model stack -- so they are deselected
+# here via `-m "not integration"`. The perception extra (torch/transformers) is
+# likewise NOT installed: those tests are integration-marked/skipped anyway.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# Least privilege: the suite only reads the checked-out tree.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same PR/ref so only the latest commit is tested.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Non-integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv + Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          # pyproject.toml pins `requires-python == "3.12.*"`.
+          python-version: "3.12"
+
+      # Core deps only (dev group brings pytest). The `perception` extra
+      # (torch/transformers, ~GBs) is intentionally omitted.
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run non-integration test suite
+        run: uv run pytest -m "not integration" -q
+
+  # Guard the C CLAP MIDI host and the CLAP
+  # SDK pin on Linux. The pin gate (verify_clap_sdk.sh) fails CI on vendored-header
+  # drift; the compile-check catches header/portability/-Werror breaks against the
+  # PINNED CLAP 1.2.6 headers. `clang -c` (compile-only, no link) needs no plugin
+  # runtime -- it never dlopen's a .clap, so no real plugin/binary is required.
+  clap-host-compile-check:
+    name: CLAP MIDI host compile-check (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ubuntu-latest ships clang, but install explicitly so the job never
+      # silently depends on the runner image's toolset.
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      # T2 acceptance: verify_clap_sdk.sh runs in CI (pins are law, design §10).
+      - name: Verify CLAP SDK pin
+        run: bash scripts/verify_clap_sdk.sh
+
+      # T2 acceptance: clang -c compiles the host against the vendored headers on
+      # Linux. Flags mirror scripts/build_clap_midi_host.sh (-std=c11 -Wall -Wextra
+      # -Werror, -I vendor/clap/include); the macOS-only `-arch arm64` and the link
+      # flags (`-ldl`, `-o <binary>`) are dropped -- this is a compile-only object
+      # build (`-c -o <obj>`), not a link.
+      - name: Compile-check clap_midi_host.c (-Werror, vendored headers)
+        run: >-
+          clang -std=c11 -Wall -Wextra -Werror
+          -I vendor/clap/include
+          -c tools/clap_midi_host/clap_midi_host.c
+          -o /tmp/clap_midi_host.o

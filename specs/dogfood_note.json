@@ -1,0 +1,11 @@
+{
+  "spec_version": "1.0.0",
+  "stimulus": {
+    "kind": "midi",
+    "ref": "corpus/midi/c3_sustain_2s.mid"
+  },
+  "patch_class": "noise_free",
+  "params": {
+    "by_name": {}
+  }
+}

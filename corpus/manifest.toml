@@ -1,0 +1,64 @@
+# sonoscope stimulus corpus manifest (Task E1, design §6.1, R4).
+#
+# Pins-are-law: this file records the sha256 + generator + params of
+# every pinned stimulus item. `sonoscope corpus verify`
+# (sonoscope.corpus.verify) recomputes each hash and returns a FAILURE
+# result on drift. Items are script-generated (not opaque binaries):
+# regenerate byte-identically with `python scripts/generate_corpus.py`.
+#
+# All signals are 48 kHz float32 canonical IEEE-float WAV (no PEAK chunk,
+# no timestamps); the single stochastic generator (pink_noise) uses the
+# pinned RNG seed below. Do not hand-edit hashes — regenerate.
+
+schema = "sonoscope-corpus/1"
+seed = 305419896
+sample_rate_hz = 48000
+
+[items.impulse]
+path = "signals/impulse_2s.wav"
+kind = "signal"
+generator = "gen_impulse"
+sha256 = "43ba23486d8ce887cd0dde81797400b370b3e39f3297e04edbd2fa009b93010f"
+params = { sample_rate_hz = 48000, duration_s = 2.0, dtype = "float32", wav_format = "ieee-float-le", amplitude = 1.0 }
+
+[items.sweep]
+path = "signals/logsweep_20-20k_2s.wav"
+kind = "signal"
+generator = "gen_logsweep"
+sha256 = "80982891342db865e4352fb0e9ffd7859ee8009be1fe736c44527de14f19c5c0"
+params = { sample_rate_hz = 48000, duration_s = 2.0, dtype = "float32", wav_format = "ieee-float-le", amplitude = 0.5, f0_hz = 20.0, f1_hz = 20000.0, shape = "log-sine" }
+
+[items.pink_noise]
+path = "signals/pink_noise_2s.wav"
+kind = "signal"
+generator = "gen_pink_noise"
+sha256 = "1a7e30c3d9696962f6cdb605c0383483fcdc8edf10c18017f9bcdc5faa166104"
+params = { sample_rate_hz = 48000, duration_s = 2.0, dtype = "float32", wav_format = "ieee-float-le", amplitude = 0.5, seed = 305419896, method = "fft-1/sqrt(f)" }
+
+[items.tone]
+path = "signals/tone_1k_2s.wav"
+kind = "signal"
+generator = "gen_tone"
+sha256 = "fe4479099d7897dfcb2f0bcc9a077fe0c40c7d6f715f8ac7f6edec44a6bb102b"
+params = { sample_rate_hz = 48000, duration_s = 2.0, dtype = "float32", wav_format = "ieee-float-le", amplitude = 0.5, frequency_hz = 1000.0 }
+
+[items.silence]
+path = "signals/silence_2s.wav"
+kind = "signal"
+generator = "gen_silence"
+sha256 = "722ebdbb2d1cf2102bf68b57cc9dea8c975e52ad7c9c2129eb581b71df8e8567"
+params = { sample_rate_hz = 48000, duration_s = 2.0, dtype = "float32", wav_format = "ieee-float-le", amplitude = 0.0 }
+
+[items.c3_sustain]
+path = "midi/c3_sustain_2s.mid"
+kind = "midi"
+generator = "gen_midi_c3_sustain"
+sha256 = "b2d562c93ec9086d3b4ef36eddabd58c18ff3407d1c19da78dd6aad167468bec"
+params = { ticks_per_beat = 480, tempo_us_per_beat = 500000, note = 48, velocity = 100, duration_s = 2.0 }
+
+[items.phrase_4note]
+path = "midi/phrase_4note.mid"
+kind = "midi"
+generator = "gen_midi_phrase_4note"
+sha256 = "e564909e0eb050740ad83a94273cae89959ce1b82a8a1af97f89b8e8aeaf5a84"
+params = { ticks_per_beat = 480, tempo_us_per_beat = 500000, notes = [48, 52, 55, 60], velocity = 100, note_duration_s = 0.5 }

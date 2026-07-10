@@ -1,0 +1,14 @@
+{
+  "spec_version": "1.0.0",
+  "stimulus": {
+    "kind": "midi",
+    "ref": "corpus/midi/c3_sustain_2s.mid"
+  },
+  "patch_class": "noisy",
+  "params": {
+    "by_name": {
+      "a_filter_1_type": 0.030303030303030304,
+      "a_filter_1_cutoff": 0.9
+    }
+  }
+}

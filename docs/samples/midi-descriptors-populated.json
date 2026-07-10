@@ -1,0 +1,67 @@
+{
+  "measured": [
+    {
+      "term": "note-density",
+      "value": 1.5,
+      "metric": "notes_per_second",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    },
+    {
+      "term": "register",
+      "value": 62.2,
+      "metric": "mean_note",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    },
+    {
+      "term": "pitch-range",
+      "value": 24.0,
+      "metric": "note_span_semitones",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    },
+    {
+      "term": "polyphony",
+      "value": 3.0,
+      "metric": "max_concurrent_notes",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    },
+    {
+      "term": "velocity-dynamics",
+      "value": 24.166091947189145,
+      "metric": "velocity_std",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    },
+    {
+      "term": "ioi",
+      "value": 0.75,
+      "metric": "median_ioi_seconds",
+      "direction": "value",
+      "threshold": null,
+      "estimated": false,
+      "confidence": null
+    }
+  ],
+  "hybrid": [],
+  "advisory": [],
+  "summary": "measured: 1.50 notes/s, note 62.2, 24 st, 3 voices, velocity std 24.2, 0.750s IOI",
+  "library": {
+    "thresholds_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "deriver_version": "midi-1.0.0",
+    "advisory_coverage": null,
+    "advisory_dropped": null
+  }
+}

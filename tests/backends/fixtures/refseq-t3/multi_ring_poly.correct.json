@@ -1,0 +1,22 @@
+[
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 120, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_on", "channel": 0, "note": 60, "velocity": 90, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 240, "t_samples": 6000},
+  {"type": "note_off", "channel": 0, "note": 60, "velocity": 0, "t_ticks": 480, "t_samples": 12000},
+  {"type": "note_on", "channel": 1, "note": 42, "velocity": 70, "t_ticks": 480, "t_samples": 12000},
+  {"type": "note_off", "channel": 1, "note": 42, "velocity": 0, "t_ticks": 576, "t_samples": 14400},
+  {"type": "note_on", "channel": 0, "note": 64, "velocity": 85, "t_ticks": 960, "t_samples": 24000},
+  {"type": "note_off", "channel": 0, "note": 64, "velocity": 0, "t_ticks": 1440, "t_samples": 36000},
+  {"type": "note_on", "channel": 1, "note": 42, "velocity": 70, "t_ticks": 1440, "t_samples": 36000},
+  {"type": "note_off", "channel": 1, "note": 42, "velocity": 0, "t_ticks": 1536, "t_samples": 38400},
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 120, "t_ticks": 1920, "t_samples": 48000},
+  {"type": "note_on", "channel": 0, "note": 67, "velocity": 80, "t_ticks": 1920, "t_samples": 48000},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 2160, "t_samples": 54000},
+  {"type": "note_off", "channel": 0, "note": 67, "velocity": 0, "t_ticks": 2400, "t_samples": 60000},
+  {"type": "note_on", "channel": 1, "note": 42, "velocity": 70, "t_ticks": 2400, "t_samples": 60000},
+  {"type": "note_off", "channel": 1, "note": 42, "velocity": 0, "t_ticks": 2496, "t_samples": 62400},
+  {"type": "note_on", "channel": 0, "note": 72, "velocity": 95, "t_ticks": 2880, "t_samples": 72000},
+  {"type": "note_off", "channel": 0, "note": 72, "velocity": 0, "t_ticks": 3360, "t_samples": 84000},
+  {"type": "note_on", "channel": 1, "note": 42, "velocity": 70, "t_ticks": 3360, "t_samples": 84000},
+  {"type": "note_off", "channel": 1, "note": 42, "velocity": 0, "t_ticks": 3456, "t_samples": 86400}
+]

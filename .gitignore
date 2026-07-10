@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual env
+.venv/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Determinism floors cache (cache/determinism/<binary_sha256>/<patch_class>.json, F2/§3.5)
+cache/
+
+# macOS
+.DS_Store

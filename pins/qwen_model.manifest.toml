@@ -1,0 +1,66 @@
+# Qwen2-Audio model pin manifest (Task A5, reconciled by B3 — design §11.2 / §11.3 / §18.1)
+#
+# Pins-are-law: this file records the EXACT local-Qwen perception weights the
+# `sonoscope[perception]` extra runs against. `scripts/fetch_qwen_model.sh`
+# downloads the pinned HF repo revision into a cache dir and hard-fails (nonzero)
+# on ANY `model_sha256` mismatch. Drift is a hard fail (design §11.3, AGENTS.md
+# "Pins are law"). The deterministic core never depends on these weights;
+# perception is advisory and optional (design §2.1, §10.2).
+#
+# ---------------------------------------------------------------------------
+# B3 RESOLUTION (2026-07-05) — runtime pivot Nexa-SDK-GGUF -> transformers
+# ---------------------------------------------------------------------------
+# The R6 probe (B3, design §10.3; verdict PASS 4/5) ran
+# a real audio-in describe() and RESOLVED §18.1 as follows:
+#
+#  * RUNTIME = transformers reference runtime (`Qwen2AudioForConditionalGeneration`
+#    + `AutoProcessor`, torch/MPS fp16). The originally-pinned `nexa-gguf` is only
+#    the GGUF file-format library, NOT an inference engine, and no installable
+#    macOS/arm64 Nexa SDK wheel exists — so the Nexa GGUF path was abandoned.
+#    pyproject.toml's perception extra now pins `transformers` + `torch`.
+#
+#  * MODEL = Qwen/Qwen2-Audio-7B-Instruct, pinned by its exact HF commit `revision`
+#    below. The transformers checkpoint is a set of safetensors shards + configs;
+#    it BUNDLES the audio tower + projector inside the weights, so there is NO
+#    separate GGUF "mmproj" file (that §18.1 hazard was specific to the abandoned
+#    GGUF runtime). Audio capability is instead pinned via `config.json`.
+#
+#  * The shas below are REAL — computed from the actually-downloaded artifacts at
+#    the pinned revision (no fabrication). To keep the manifest small we pin the
+#    load-bearing configs + a representative weight shard (the full 5-shard set is
+#    fetched by revision; the index + shard sha guard weight integrity).
+#
+# Track G may later add a quantized (q4_K_M) path as an OPTIMIZATION; B3 proved
+# feasibility at full precision, which is the gate that mattered.
+
+[qwen_model]
+model_id = "Qwen2-Audio-7B-Instruct"
+hf_repo = "Qwen/Qwen2-Audio-7B-Instruct"
+# Exact HF commit the B3 probe ran + hashed against (pins-are-law: fetch this rev).
+revision = "0a095220c30b7b31434169c3086508ef3ea5bf0a"
+# Runtime confirmed by B3 on Apple Silicon / py3.12 (design §11.2 / §4.3 / §18.1).
+runtime = "transformers"
+precision = "fp16"
+# Default download destination for scripts/fetch_qwen_model.sh (overridable via
+# the SONOSCOPE_MODEL_CACHE env var). The ~16 GB weights live OUTSIDE the repo.
+cache_dir = "~/.cache/sonoscope/models/qwen2-audio-7b-instruct"
+
+# --- model config (declares the audio tower — proves audio-in capability) ----
+[qwen_model.files.config]
+filename = "config.json"
+model_sha256 = "ab122e112e2450f10cec59216185bd519ccd7529c79d4c1c00255d43b97a037d"
+
+# --- safetensors weight index (enumerates + integrity-maps all shards) -------
+[qwen_model.files.weights_index]
+filename = "model.safetensors.index.json"
+model_sha256 = "b6cc05302d1bd25fbab6915e3a033603c524416b984f661d213f9a1f8e3b3895"
+
+# --- representative weight shard (guards weight-blob integrity) ---------------
+[qwen_model.files.weights_shard]
+filename = "model-00001-of-00005.safetensors"
+model_sha256 = "383de5b5b06f7e7f276850a065d9164641c93009f79a377352a7c949d17c1d7a"
+
+# --- audio preprocessor config (WhisperFeatureExtractor params, 16 kHz) ------
+[qwen_model.files.preprocessor]
+filename = "preprocessor_config.json"
+model_sha256 = "4cd7c6c061fe79244c57b0c320b2873f3ee5acce2277f7cc3aced042725680f2"

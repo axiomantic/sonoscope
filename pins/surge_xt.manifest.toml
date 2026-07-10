@@ -1,0 +1,70 @@
+# Surge XT pin manifest (Task A4, design §11.3 — M-install)
+#
+# Pins-are-law: this file records the EXACT dogfood-plugin artifacts sonoscope
+# renders against. `scripts/verify_surge_xt.sh` recomputes every hash below and
+# hard-fails (nonzero) on ANY mismatch or missing artifact; `doctor` consumes the
+# same manifest. Drift is a hard fail (design §11.3, AGENTS.md "Pins are law").
+#
+# ---------------------------------------------------------------------------
+# Provenance recorded at pin time (2026-07-05, this machine)
+# ---------------------------------------------------------------------------
+# - Exact installer artifact: an official Surge Synth Team distribution `.pkg`
+#   (macOS). `pkgutil --pkgs` shows the receipt domain `org.surge-synth-team`
+#   with component subpackages: surge-xt.vst3.pkg, surge-xt.clap.pkg,
+#   surge-xt.app.pkg, surge-xt.component.pkg (AU), and surge-xt.resources.pkg.
+# - Factory content IS a SEPARATE payload: it ships in the `resources` component
+#   subpackage of the same distribution `.pkg` (not embedded in the VST3/CLAP
+#   bundles) and installs to a system directory distinct from the plugin bundles.
+#   Renders depend on this factory data, so it is pinned independently of the
+#   binaries (design §11.3: "pins the factory content, not just the binary").
+# - Resolved factory-content path: /Library/Application Support/Surge XT
+#   (system Application Support; the per-user override dir was absent). Its
+#   top-level entries are the 8 factory subdirectories hashed below plus one
+#   informational text file.
+# - Installed release version: 1.3.4 (CFBundleShortVersionString /
+#   CFBundleVersion from Surge XT.vst3/Contents/Info.plist).
+# - installer_artifact_sha256 is now RESOLVED: it is the sha256 of the official
+#   Surge XT 1.3.4 macOS installer `.pkg`. The authoritative .pkg/DMG pin lives in
+#   pins/a4_surge_xt_pkg.manifest.toml (`[a4_pkg].pkg_sha256` is this same digest,
+#   plus `[a4_pkg.upstream_dmg]` pins the containing DMG url + sha256). The digest
+#   was computed by A4 from the local Homebrew Caskroom copy Homebrew extracted
+#   from the verified upstream DMG (no fabricated hash — project policy). See that
+#   manifest for full provenance.
+#
+# ---------------------------------------------------------------------------
+# Tree-hash algorithm (order-stable; verify_surge_xt.sh uses the SAME steps)
+# ---------------------------------------------------------------------------
+#   For a directory: hash each regular file with `shasum -a 256`, sort the
+#   resulting "<hash>  <relpath>" lines under LC_ALL=C, then sha256 the
+#   concatenation. Sorting makes the tree hash independent of filesystem
+#   enumeration order. For a single top-level file: its plain file sha256.
+
+[surge_xt]
+release_version = "1.3.4"
+# Sha256 of the official Surge XT 1.3.4 macOS installer .pkg. Authoritative
+# .pkg/DMG pin: pins/a4_surge_xt_pkg.manifest.toml ([a4_pkg].pkg_sha256 == this).
+installer_artifact_sha256 = "40e4fb402fb470bd71e47f2f0005ffa796f175c41e8a5726f0c39e505373086b"
+
+[surge_xt.vst3]
+path = "/Library/Audio/Plug-Ins/VST3/Surge XT.vst3"
+tree_sha256 = "1d766c05b111b30aff45761db5e7073412db0d0fcc04b691f9847f8b76bbc478"
+
+[surge_xt.clap]
+path = "/Library/Audio/Plug-Ins/CLAP/Surge XT.clap"
+tree_sha256 = "d7d6603a5d6aea4252ea62153e01895214991c63529aea243ffb1effb2936f06"
+
+[surge_xt.factory_content]
+path = "/Library/Application Support/Surge XT"
+
+# Per top-level entry. A directory entry is a tree_sha256 (algorithm above); a
+# file entry is a plain file sha256. verify_surge_xt.sh discriminates by stat.
+[surge_xt.factory_content.entries]
+"fx_presets" = "7255f132baf4b97bf91fd462a15f32ff9131bb03ac8e643928ebe04ad1c4552e"
+"modulator_presets" = "5439de432b106330a9e05b42e318ef568138e0dcf6945eeff30fdc5d8ddd9ce6"
+"patches_3rdparty" = "f7b296277aaf84054945f68ebfd8d76805d594cd2660e046b3a4bd7eef3e5ce2"
+"patches_factory" = "ecd2ae2d1ae66acc9bc83bed2f0ce37cf70fa2f26b1ff0191cdb4f874200acc8"
+"skins" = "97bf572f297b85cd193bfa6781c8ba41fecead7ac93671ad9b57c46f10e1bee3"
+"tuning_library" = "bb35f1fdc2d4af6163eb658e588728b8f759254eb56170426db844411d65b6dc"
+"wavetables" = "9b1d89c5e48e4b91deba54fc0d7e820d52cdae80f0d6ada128b94123ab4b6284"
+"wavetables_3rdparty" = "c9c382d301a5067e63f60323f5c9c2a7501d0ceeb65242bb8de1cace471d785c"
+"WHERE TO PLACE USER DATA.txt" = "5e1202af83d2909f81419599603beb15a1b065160819f88beb040a15d1d171d2"

@@ -1,0 +1,9 @@
+{
+  "tempo_bpm": 120.0,
+  "start_position_beats": 0.0,
+  "duration_beats": 4.0,
+  "tsig_num": 4,
+  "tsig_den": 4,
+  "sample_rate": 48000,
+  "block_size": 512
+}

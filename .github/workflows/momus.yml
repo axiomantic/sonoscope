@@ -1,0 +1,74 @@
+name: Momus Code Review
+
+# AI code review via axiomantic/momus.
+# Triggers:
+#   - a PR is opened/reopened            -> first review
+#   - someone comments "/ai-review" on a PR -> manual re-review
+#   - manual workflow_dispatch (pr_number) -> manual re-review
+#
+# NOTE: issue_comment + workflow_dispatch only run from the DEFAULT branch (main),
+# so this file must live on main for "/ai-review" to work.
+#
+# REQUIRED before this does anything (repo Settings -> Secrets and variables -> Actions):
+#   - secret OPENROUTER_API_KEY  (maps to LLM_API_KEY below; rename both sides for another provider)
+# Edit LLM_BASE_URL / LLM_MODEL below to pick a provider/model (default: OpenRouter + deepseek-v4-pro).
+# Optional: GitHub App (MOMUS_APP_ID / MOMUS_APP_PRIVATE_KEY) so APPROVE verdicts stick instead of
+# downgrading to COMMENT -- see https://axiomantic.github.io/momus/latest/how-to/set-up-github-app/
+
+on:
+  pull_request:
+    types: [opened, reopened]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to review"
+        required: true
+        type: string
+
+jobs:
+  review:
+    # PR open/reopen and manual dispatch always run; comments run only when the
+    # comment is on a PR (not a plain issue) and contains /ai-review -- otherwise
+    # every issue comment would spend a runner minute + LLM quota.
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '/ai-review'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Resolve PR number and head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}"
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .head.sha)
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Run momus
+        uses: axiomantic/momus@v1.2.2
+        with:
+          pr_number: ${{ steps.pr.outputs.pr_number }}
+          event: ${{ github.event_name }}
+          app_id: ${{ secrets.MOMUS_APP_ID }}
+          private_key: ${{ secrets.MOMUS_APP_PRIVATE_KEY }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          LLM_BASE_URL: https://openrouter.ai/api/v1
+          LLM_MODEL: deepseek/deepseek-v4-pro

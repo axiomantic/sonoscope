@@ -1,0 +1,18 @@
+[
+  {"type": "note_on", "channel": 3, "note": 48, "velocity": 100, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 110, "t_ticks": 0, "t_samples": 0},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 240, "t_samples": 6000},
+  {"type": "note_off", "channel": 2, "note": 48, "velocity": 0, "t_ticks": 960, "t_samples": 24000},
+  {"type": "note_on", "channel": 2, "note": 55, "velocity": 90, "t_ticks": 1440, "t_samples": 36000},
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 110, "t_ticks": 1440, "t_samples": 36000},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 1680, "t_samples": 42000},
+  {"type": "note_off", "channel": 2, "note": 55, "velocity": 0, "t_ticks": 1920, "t_samples": 48000},
+  {"type": "note_on", "channel": 2, "note": 48, "velocity": 100, "t_ticks": 2880, "t_samples": 72000},
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 110, "t_ticks": 2880, "t_samples": 72000},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 3120, "t_samples": 78000},
+  {"type": "note_off", "channel": 2, "note": 48, "velocity": 0, "t_ticks": 3840, "t_samples": 96000},
+  {"type": "note_on", "channel": 2, "note": 55, "velocity": 90, "t_ticks": 4320, "t_samples": 108000},
+  {"type": "note_on", "channel": 9, "note": 36, "velocity": 110, "t_ticks": 4320, "t_samples": 108000},
+  {"type": "note_off", "channel": 9, "note": 36, "velocity": 0, "t_ticks": 4560, "t_samples": 114000},
+  {"type": "note_off", "channel": 2, "note": 55, "velocity": 0, "t_ticks": 4800, "t_samples": 120000}
+]

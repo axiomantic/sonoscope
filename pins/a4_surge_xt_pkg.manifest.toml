@@ -1,0 +1,49 @@
+# A4 Surge XT installer .pkg pin manifest (Task A4, design §11.3 — M-install)
+#
+# Pins-are-law: this file records the EXACT macOS installer `.pkg` that Task A4's
+# `scripts/install_surge_xt.sh` feeds to `installer -pkg ... -target /` to
+# provision the dogfood synth (Surge XT VST3 + CLAP + AU + standalone app + the
+# factory `resources` payload). `scripts/verify_a4_pkg.sh` recomputes the .pkg's
+# sha256 and hard-fails (nonzero) on ANY mismatch. Drift is a hard fail
+# (AGENTS.md "Pins are law", design §11.3). Mirrors pins/clap_sdk.manifest.toml
+# and pins/surge_xt.manifest.toml.
+#
+# ---------------------------------------------------------------------------
+# Provenance recorded at pin time (2026-07-07, this machine)
+# ---------------------------------------------------------------------------
+# - Upstream canonical source: the official Surge Synth Team macOS DMG
+#   `surge-xt-macOS-1.3.4.dmg`, published on the surge-synthesizer/releases-xt
+#   GitHub releases (tag 1.3.4) — see [a4_pkg.upstream_dmg].url below. That DMG's
+#   sha256 (upstream_dmg.sha256) matches BOTH the value Homebrew independently
+#   pins in its `surge-xt` cask AND the DMG in this machine's Homebrew download
+#   cache (~/Library/Caches/Homebrew/downloads) — third-party corroboration that
+#   the DMG is the genuine upstream artifact.
+# - The pinned .pkg is the `installer -pkg` artifact shipped INSIDE that DMG: a
+#   xar installer archive (`file`: "xar archive"), 419769466 bytes. Its sha256
+#   (pkg_sha256) was computed with `shasum -a 256` from the local Homebrew
+#   Caskroom copy (/opt/homebrew/Caskroom/surge-xt/1.3.4/) that Homebrew
+#   extracted from the verified DMG above. No hash was fabricated (project policy:
+#   pins are law, and a copy WAS present on disk to hash).
+# - This is the same installer artifact whose slot `pins/surge_xt.manifest.toml`
+#   `installer_artifact_sha256` reserved (left "" there because, at that pin's
+#   authoring time, no .pkg was on disk to hash).
+#
+# ---------------------------------------------------------------------------
+# Algorithm (single-file digests, NOT tree hashes)
+# ---------------------------------------------------------------------------
+#   pkg_sha256 and upstream_dmg.sha256 are plain `shasum -a 256` digests of the
+#   respective single-file artifacts. verify_a4_pkg.sh recomputes pkg_sha256 the
+#   same way against a provided/downloaded .pkg.
+
+[a4_pkg]
+name = "surge-xt-macOS-1.3.4.pkg"
+release_version = "1.3.4"
+installs = "Surge XT VST3 + CLAP + AU (component) + standalone app + factory resources payload"
+pkg_sha256 = "40e4fb402fb470bd71e47f2f0005ffa796f175c41e8a5726f0c39e505373086b"
+
+[a4_pkg.upstream_dmg]
+# The official upstream DMG that contains the pinned .pkg. Its sha256 is
+# corroborated by the Homebrew `surge-xt` cask and this machine's download cache.
+name = "surge-xt-macOS-1.3.4.dmg"
+url = "https://github.com/surge-synthesizer/releases-xt/releases/download/1.3.4/surge-xt-macOS-1.3.4.dmg"
+sha256 = "b56e8d51a8dc2382ae668c9ff4e96bae38dbd452af4e584d5a5ef50ab2d09b07"

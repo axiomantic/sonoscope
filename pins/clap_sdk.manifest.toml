@@ -1,0 +1,45 @@
+# CLAP SDK pin manifest (pin gate; see build_clap_midi_host.sh)
+#
+# Pins-are-law: this file records the EXACT CLAP SDK headers sonoscope's C CLAP
+# host (tools/clap_midi_host/clap_midi_host.c, H1) compiles against. sonoscope
+# vendors its OWN copy under vendor/clap/include (committed, header-only) rather
+# than reusing an external plugin project's headers, so the capture toolchain is
+# reproducible from this repo alone (design §3 "Own pinned CLAP SDK").
+#
+# scripts/verify_clap_sdk.sh recomputes the tree hash below and hard-fails
+# (nonzero) on ANY mismatch or missing tree; scripts/build_clap_midi_host.sh (P2)
+# runs it as a pin gate before compiling, and doctor/CI consume the same manifest.
+# Drift is a hard fail (AGENTS.md "Pins are law", design §10).
+#
+# ---------------------------------------------------------------------------
+# Provenance recorded at pin time (2026-07-07, this machine)
+# ---------------------------------------------------------------------------
+# - Upstream: the header-only free-audio/clap SDK, obtained via
+#   `git clone --branch 1.2.6 https://github.com/free-audio/clap` and checked out
+#   at the annotated tag `1.2.6`, which resolves to commit
+#   69a69252fdd6ac1d06e246d9a04c0a89d9607a17 (confirmed via `git rev-list -n1`).
+# - Vendored subtree: only include/clap (the public C headers) is committed; the
+#   upstream CMake/src/artwork are NOT vendored (the host needs headers only).
+# - Header count at pin time: 60 files under vendor/clap/include/clap
+#   (clap.h + entry.h + the ext/, factory/, private/ trees). CLAP_VERSION is
+#   1.2.6 (vendor/clap/include/clap/version.h).
+#
+# ---------------------------------------------------------------------------
+# Tree-hash algorithm (order-stable; verify_clap_sdk.sh uses the SAME steps,
+# mirrors pins/surge_xt.manifest.toml)
+# ---------------------------------------------------------------------------
+#   For a directory: hash each regular file with `shasum -a 256`, sort the
+#   resulting "<hash>  <relpath>" lines under LC_ALL=C, then sha256 the
+#   concatenation. Sorting makes the tree hash independent of filesystem
+#   enumeration order.
+
+[clap_sdk]
+source_repo = "https://github.com/free-audio/clap"
+version = "1.2.6"
+commit_sha = "69a69252fdd6ac1d06e246d9a04c0a89d9607a17"
+
+[clap_sdk.vendored_tree]
+# path is repo-relative (resolved against the repo root by verify_clap_sdk.sh);
+# an absolute path is honored as-is so the tamper test can point at a tmp copy.
+path = "vendor/clap/include"
+tree_sha256 = "eca094df9e4f33339a39a2dfd8a4462b4849ce2d12bf6197e6d2196f257818c9"

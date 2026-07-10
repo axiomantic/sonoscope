@@ -1,0 +1,573 @@
+# =============================================================================
+# Descriptors Calibration-Corpus Manifest  —  PROPOSAL
+# =============================================================================
+#
+# STATUS: PROPOSAL, pending maintainer sign-off.
+#         This file is NOT yet a calibration
+#         input. No production source depends on it at C1 (design §10, impl T7).
+#
+# WHAT THIS IS: the pinned exemplar corpus that will derive the ABSOLUTE separating
+#   boundaries frozen into `DERIVER_THRESHOLDS` (src/sonoscope/descriptors/thresholds.py)
+#   and re-pin its sibling `thresholds_sha256`. Until this manifest is approved AND a
+#   real calibration run produces final numbers, every value in `DERIVER_THRESHOLDS`
+#   (and `EXPECTED_THRESHOLDS_SHA256` in the T2 drift-anchor test) is a PLACEHOLDER.
+#   On approval, a SEPARATE follow-up commit swaps calibrated numbers in and re-pins
+#   the digest. This proposal commit does NOT freeze any number.
+#
+# PLACEHOLDER PROVENANCE (dehallucination — F12):
+#   Every `path`, `source`, and `sha256` below is a clearly-marked "TBD" placeholder.
+#   No fabricated URLs, no invented 64-hex digests, no guessed licenses. The go/no-go
+#   review is about CORPUS COMPOSITION, LICENSING POLICY, and METHODOLOGY — none of
+#   which need real digests. See [methodology].sha256_precondition for the hard rule
+#   on resolving TBD -> real digest BEFORE the calibration run.
+#
+# LICENSING POLICY (HARD CONSTRAINT): CC0 or CC-BY ONLY. No other license is eligible.
+#   In-repo redistribution PLUS this project's licensing policy make every NC/SA/ND variant —
+#   CC-BY-NC, CC-BY-SA, CC-BY-ND (and combinations) — INELIGIBLE. Per-clip license
+#   vetting BEFORE commit is LOAD-BEARING: candidate libraries (Freesound, cctrax,
+#   archive.org CC collections) routinely host CC-BY-NC / CC-BY-SA / CC-BY-ND clips
+#   INTERLEAVED with eligible material, so NO library is pre-trusted as a whole — the
+#   license is verified per individual clip, never inferred from the host. Each clip's
+#   verified license + attribution/provenance is recorded in-manifest at sourcing time;
+#   the specific per-clip source URL is resolved during sourcing, not fabricated now.
+#
+# SAMPLE RATE: 48000 Hz, matching FROZEN_PARAMS.sr exactly
+#   (src/sonoscope/features/librosa_features.py — `"sr": 48000`). NO resample:
+#   compute_summary() rejects any clip whose rate != the frozen sr.
+# =============================================================================
+
+version = "1.0.0-proposal"  # pre-release tag: distinguishes this UNSIGNED proposal from the
+                            # post-approval calibration commit, which bumps to "1.0.0".
+sample_rate_hz = 48000  # == FROZEN_PARAMS.sr; NO resample (verified in librosa_features.py)
+
+# -----------------------------------------------------------------------------
+# [review] — the go/no-go SIGN-OFF contract. What the signer approves when they
+# sign this proposal, and (explicitly) what is OUT OF SCOPE for the signature.
+# Signing this artifact = approving the THREE axes below; it does NOT assert that
+# real audio has been sourced, digested, or license-verified (that is the separate
+# post-approval calibration commit, gated by [methodology].sha256_precondition).
+# -----------------------------------------------------------------------------
+[review]
+signer = "maintainer"  # sign-off is maintainer-only.
+signable = false  # flips to true only in the signed commit; the proposal ships unsigned.
+signable_when = """
+Signing approves EXACTLY these three axes and nothing more:
+  (a) CORPUS COMPOSITION — the 29-clip plan: term coverage, positive/negative
+      exemplar sets, per-term count floors (see [exemplar_counts]), the neutral
+      control, and the busy-but-narrow bandwidth anchor.
+  (b) LICENSING POLICY — CC0 or CC-BY ONLY; every NC/SA/ND variant ineligible;
+      per-clip verification is load-bearing and never inferred from the host library
+      (see the LICENSING POLICY header block).
+  (c) DERIVATION METHODOLOGY — ABSOLUTE separating boundaries (midpoint of touching
+      extremes), overlap => FLAG, never a percentile/relative fallback (see
+      [methodology].measured_boundary_rule and .boundary_stability).
+"""
+out_of_scope_for_signature = """
+NOT required for the signature (they are the POST-APPROVAL calibration commit,
+gated by [methodology].sha256_precondition and .on_approval):
+  - real per-clip sha256 digests (every clip.sha256 stays "TBD" by design here),
+  - the sourced audio files themselves (nothing is downloaded for this proposal),
+  - per-clip license verification / attribution capture (recorded at sourcing time).
+A reviewer can approve composition + policy + methodology WITHOUT any of the above.
+"""
+
+# -----------------------------------------------------------------------------
+# [midi_deferred] — the ONE deliberate gap in this manifest, stated so the
+# AUDIO-ONLY scope is not mistaken for an omission. This is a STUB, not a method.
+# -----------------------------------------------------------------------------
+[midi_deferred]
+# The C2 MIDI descriptor path ships as THRESHOLD-FREE, MEASURED value-readouts
+# (note-density, register, pitch-range, polyphony, velocity-dynamics, IOI) reduced
+# directly from MidiBlock.events and wired into analyze_midi (design §5, Cycle C2).
+# Because those readouts are raw measured values with NO firing threshold, the MIDI
+# path needs NEITHER a MIDI calibration corpus NOR any MIDI threshold methodology.
+# This manifest is therefore AUDIO-ONLY BY DESIGN — not by omission.
+scope = "AUDIO-ONLY by design; MIDI (C2) is threshold-free measured readouts, needs no corpus."
+midi_descriptors = "note-density, register, pitch-range, polyphony, velocity-dynamics, IOI (all MEASURED, threshold-free)"
+midi_source = "reduced from MidiBlock.events; wired into analyze_midi (design §5, Cycle C2)"
+midi_deriver_version = "midi-1.0.0"  # C2 MIDI deriver identity (distinct from audio DERIVER_VERSION 1.0.0)
+midi_thresholds_sha256 = ""  # EMPTY by design: threshold-free path pins no thresholds digest.
+
+# -----------------------------------------------------------------------------
+# [methodology] — how thresholds are DERIVED from this corpus (design §10, Q7).
+# Recorded here so a reviewer can reproduce every boundary at calibration time.
+# -----------------------------------------------------------------------------
+[methodology]
+status = "PROPOSAL — pending maintainer sign-off"
+
+# ABSOLUTE, NOT percentile/relative. For each MEASURED single-metric term:
+#   1. Compute the term's mapped metric (DeterministicSummary field) over the
+#      POSITIVE exemplar set (clips whose `labels` include the term) and over the
+#      NEGATIVE set (clips whose `neg_labels` include the term).
+#   2. If the two sets are SEPARABLE (high-direction term:
+#      min(metric over positives) > max(metric over negatives); low-direction term:
+#      max(metric over positives) < min(metric over negatives)), set the threshold at
+#      the SEPARATING BOUNDARY = midpoint between the two touching extremes.
+#   3. If the sets OVERLAP, DO NOT silently pick a percentile. FLAG the term for
+#      re-labeling or exemplar curation and resolve before freeze.
+measured_boundary_rule = """
+threshold = midpoint( max(metric over negatives), min(metric over positives) )   # high-direction term
+threshold = midpoint( max(metric over positives), min(metric over negatives) )   # low-direction (dark, quiet, spare) term
+overlap => FLAG term for re-labeling / curation; never fall back to a percentile.
+"""
+
+# BOUNDARY STABILITY: midpoint(max-neg, min-pos) is fixed by EXACTLY the two touching
+# boundary clips, so at the >=2/>=2 floor a single outlier or mislabel fully determines a
+# boundary. The TIGHTEST terms — dark (spectral_centroid low-direction) and dynamic
+# (crest_factor high-direction) — are therefore held to >=3 POSITIVE AND >=3 NEGATIVE
+# exemplars, so no single clip alone sets their boundary. (All other measured terms remain
+# at the >=2/>=2 floor; revisit if calibration reveals a fragile boundary.)
+boundary_stability = """
+tightest terms dark, dynamic: >=3 positive AND >=3 negative exemplars (harden against single-clip boundaries).
+all other measured terms: >=2/>=2 floor.
+"""
+
+# TOOLCHAIN RECORDING: params_sha256 / thresholds_sha256 pin derived VALUES, not the library
+# that produced them. Cross-version float drift in librosa/numpy could move a touching
+# boundary clip and thus a threshold. At calibration time, RECORD the exact toolchain
+# (librosa + numpy versions, and Python version) ALONGSIDE the derived numbers, so a later
+# re-run can distinguish a genuine corpus change from library float drift.
+toolchain_recording = "At calibration time, record librosa + numpy + Python versions next to derived numbers (sha256 pins values, not the library; guards against cross-version float drift on boundary clips)."
+
+# Metric map (design §5.1) the deriver reads for each measured term:
+#   bright/dark  -> spectral_centroid_hz   (high / low)
+#   loud/quiet   -> rms_dbfs               (high / low)
+#   compressed/dynamic -> crest_factor_db  (low / high)
+#   busy/spare   -> onset_rate_hz          (high / low)
+#   dense        -> onset_rate_hz AND spectral_bandwidth_hz (AND-of-per-metric; "sparse" = dense-negative)
+metric_map = """
+bright=spectral_centroid_hz(high); dark=spectral_centroid_hz(low)
+loud=rms_dbfs(high); quiet=rms_dbfs(low)
+compressed=crest_factor_db(low); dynamic=crest_factor_db(high)
+busy=onset_rate_hz(high); spare=onset_rate_hz(low)
+dense=onset_rate_hz(high) AND spectral_bandwidth_hz(high)
+"""
+
+# DENSE is the only measured term with TWO input axes, and each axis is calibrated on its
+# OWN separating boundary against its OWN negative pole — they are NOT calibrated jointly:
+#   AXIS 1 (onset_rate_hz, high-direction): busy-vs-spare separating boundary. Positives =
+#     dense/busy clips; negatives = the spare/sparse pole (spare-*, sparse anchors).
+#   AXIS 2 (spectral_bandwidth_hz, high-direction): calibrated against a BUSY-but-NARROW-band
+#     negative so the bandwidth floor is not silently set by an onset-sparse clip. The anchor
+#     is `dense-neg-narrowband-001` (high onset_rate, NARROW spectral_bandwidth, carries
+#     `dense` in neg_labels). Without it, every dense-negative would be onset-sparse and the
+#     bandwidth axis could not honor the separating-boundary discipline.
+#   FALLBACK: if a clean busy-but-narrow exemplar proves unavailable at sourcing (or fails
+#     license vetting), the bandwidth axis falls back to the corpus min/max normalization for
+#     spectral_bandwidth_hz instead of a separating boundary. This fallback is stated
+#     explicitly so the doc matches what is achievable; onset_rate AXIS 1 is unaffected.
+dense_two_axis = """
+axis1 onset_rate_hz: separating boundary busy(positive) vs spare/sparse(negative).
+axis2 spectral_bandwidth_hz: separating boundary vs busy-but-NARROW anchor dense-neg-narrowband-001.
+fallback (axis2 only): if no clean busy-narrow exemplar sources/vets, use corpus min/max for bandwidth.
+bandwidth_hz_min therefore has an explicit separating negative and is not set by an onset-sparse clip.
+"""
+
+# HYBRID composites (driving, punchy, warm): weights are FIXED BY DESIGN (§5.2) and are
+# NOT calibrated. Only the per-metric lo/hi NORMALIZATION bounds are calibrated, from the
+# corpus min/max of each input metric; then `fire` is set to separate positive vs negative
+# composite scores. Same separable/overlap discipline as the measured terms.
+hybrid_rule = """
+weights: FIXED by design (§5.2), not calibrated.
+lo/hi normalization bounds: calibrated from corpus min/max of each input metric.
+fire threshold: set to separate positive-vs-negative composite scores (separable => midpoint; overlap => FLAG).
+"""
+
+# HYBRID NEGATIVE SETS (explicit): "fire separates positive-vs-negative composite" needs a
+# DEFINED negative pool per composite, else the boundary is undefined. Each hybrid's negative
+# pool = the opposite-pole exemplars carrying the hybrid term in `neg_labels`, plus the global
+# neutral control. Every hybrid below has a NON-EMPTY, explicit negative set:
+#   driving (busy+fast+loud): negatives = quiet-001, spare-002, cosmic-001, neutral-001
+#     (spacious / quiet / spare = the not-driving pole).
+#   punchy  (high crest + transient onsets): negatives = compressed-001, compressed-002,
+#     neutral-001 (compressed / low-crest = the not-punchy pole).
+#   warm    (low centroid + low-mid energy): negatives = bright-001, bright-002, neutral-001
+#     (bright / high-centroid = the not-warm pole).
+hybrid_negative_sets = """
+driving- = quiet-001, spare-002, cosmic-001, neutral-001
+punchy-  = compressed-001, compressed-002, neutral-001
+warm-    = bright-001, bright-002, neutral-001
+each pool is non-empty; membership is authoritative via each clip's neg_labels below.
+"""
+
+# Provenance recording (at calibration time, NOT in this proposal): for every derived
+# value, record the contributing clip-ids and the raw metric values that set the boundary,
+# so the number is reproducible and auditable by a reviewer.
+provenance_recording = "At calibration time, record per-term: derived value + contributing clip-ids + raw metric extremes."
+
+# HARD PRECONDITION (F12): every `sha256 = "TBD"` below MUST be resolved to a real
+# 64-hex digest of the actual sourced audio file BEFORE the calibration run. You cannot
+# calibrate against un-pinned clips. This is a precondition of the POST-APPROVAL
+# calibration commit, not of this proposal commit.
+sha256_precondition = "All TBD -> real 64-hex digest of sourced file required before calibration run (not before this proposal)."
+
+# On approval: a follow-up commit (a) resolves all TBD digests, (b) runs calibration,
+# (c) swaps derived numbers into DERIVER_THRESHOLDS, (d) re-pins thresholds_sha256 and
+# EXPECTED_THRESHOLDS_SHA256 (T2 drift anchor). T2/T3 numbers remain PLACEHOLDER until then.
+on_approval = "Follow-up commit resolves digests, calibrates, swaps DERIVER_THRESHOLDS numbers, re-pins thresholds_sha256 + EXPECTED_THRESHOLDS_SHA256."
+
+# -----------------------------------------------------------------------------
+# [exemplar_counts] — the per-term stability floors, surfaced as auditable fields
+# so corpus composition (review axis (a)) is checkable at a glance without re-reading
+# the prose. These MIRROR [methodology].boundary_stability and the CLIP PLAN comment;
+# they change NO clip entry. A term satisfies its floor when it has >= the stated
+# positive AND >= the stated negative exemplar count (a clip's negatives are the other
+# clips carrying the term in `neg_labels`).
+# -----------------------------------------------------------------------------
+[exemplar_counts]
+default_floor = "≥2 positive AND ≥2 negative for every MEASURED term."
+tight_floor = "≥3 positive AND ≥3 negative for the TIGHTEST terms (dark, dynamic), so no single clip alone sets a boundary."
+dense_bandwidth_anchor = "the dense bandwidth axis additionally REQUIRES its 1 busy-but-narrow negative anchor (dense-neg-narrowband-001), else axis2 falls back to corpus min/max (see [methodology].dense_two_axis)."
+hybrid_negatives = "each hybrid (driving, punchy, warm) requires a NON-EMPTY explicit negative pool (see [methodology].hybrid_negative_sets)."
+
+# Per-term positive/negative tallies from the clip entries below (auditable summary;
+# derived from labels / neg_labels, changes no clip). floor: 2/2 unless marked TIGHT (3/3).
+[exemplar_counts.per_term]
+bright      = { pos = 2, neg = 5, floor = "2/2", pos_ids = ["bright-001", "bright-002"] }
+dark        = { pos = 3, neg = 3, floor = "3/3 TIGHT", pos_ids = ["dark-001", "dark-002", "warm-001"] }
+loud        = { pos = 4, neg = 4, floor = "2/2", pos_ids = ["loud-001", "loud-002", "compressed-002", "driving-001"] }
+quiet       = { pos = 3, neg = 4, floor = "2/2", pos_ids = ["quiet-001", "quiet-002", "spare-002"] }
+compressed  = { pos = 3, neg = 4, floor = "2/2", pos_ids = ["compressed-001", "compressed-002", "loud-002"] }
+dynamic     = { pos = 3, neg = 4, floor = "3/3 TIGHT", pos_ids = ["dynamic-001", "dynamic-002", "punchy-001"] }
+busy        = { pos = 7, neg = 7, floor = "2/2", pos_ids = ["busy-001", "busy-002", "bright-002", "dense-001", "dense-neg-narrowband-001", "driving-001", "punchy-002"] }
+spare       = { pos = 5, neg = 8, floor = "2/2", pos_ids = ["spare-001", "spare-002", "spare-003", "quiet-002", "cosmic-002"] }
+dense       = { pos = 3, neg = 5, floor = "2/2 (+1 busy-narrow bandwidth anchor)", pos_ids = ["dense-001", "dense-002", "busy-002"] }
+driving     = { pos = 2, neg = 4, floor = "2/2 hybrid (non-empty neg pool)", pos_ids = ["driving-001", "driving-002"] }
+punchy      = { pos = 3, neg = 3, floor = "2/2 hybrid (non-empty neg pool)", pos_ids = ["punchy-001", "punchy-002", "dynamic-002"] }
+warm        = { pos = 3, neg = 3, floor = "2/2 hybrid (non-empty neg pool)", pos_ids = ["warm-001", "warm-002", "dark-001"] }
+cosmic      = { pos = 2, neg = 0, floor = "advisory ≥1", pos_ids = ["cosmic-001", "cosmic-002"] }
+
+# -----------------------------------------------------------------------------
+# CLIP PLAN — coverage by term (29 clips; both extremes of every measured term +
+# hybrid exemplars with explicit negatives + cosmic advisory + a neutral all-negative
+# control). Positive exemplars listed below; a term's NEGATIVES are the other clips
+# carrying it in `neg_labels`.
+#
+#   bright  : bright-001, bright-002                 (neg pole: dark-*, warm-*, neutral-001)
+#   dark    : dark-001, dark-002, warm-001           (>=3 pos; neg: bright-001/002, neutral-001)  [TIGHT]
+#   loud    : loud-001, loud-002 (+compressed-002, driving-001)  (neg pole: quiet-*, spare-002, neutral-001)
+#   quiet   : quiet-001, quiet-002 (+spare-002)      (neg pole: loud-*, driving-001, neutral-001)
+#   compressed : compressed-001, compressed-002 (+loud-002)  (neg pole: dynamic-*, punchy-001, neutral-001)
+#   dynamic : dynamic-001, dynamic-002, punchy-001   (>=3 pos; neg: loud-002, compressed-*, neutral-001)  [TIGHT]
+#   busy    : busy-001, busy-002 (+bright-002, dense-001, dense-neg-narrowband-001, driving-001, punchy-002)
+#   spare   : spare-001, spare-002, spare-003 (+quiet-002, cosmic-002)   (neg pole: busy/dense/driving clips)
+#   dense   : dense-001, dense-002 (+busy-002)       (neg pole: spare-*, dense-neg-narrowband-001, cosmic-002, neutral-001)
+#   dense-neg-narrowband-001 : busy-but-NARROW-band anchor (dense-negative on the bandwidth axis)
+#   driving : driving-001, driving-002  (hybrid; neg: quiet-001, spare-002, cosmic-001, neutral-001)
+#   punchy  : punchy-001, punchy-002    (hybrid; neg: compressed-001/002, neutral-001)
+#   warm    : warm-001, warm-002        (hybrid; also dark-side exemplar; neg: bright-001/002, neutral-001)
+#   cosmic  : cosmic-001, cosmic-002    (advisory; >=1 required)
+#   control : neutral-001               (all-negative incl. hybrids; fires nothing — global negative anchor)
+#
+# Every MEASURED term has >=2 positive AND >=2 negative exemplars; the two TIGHTEST terms
+# (dark, dynamic) are held to >=3/>=3 (see [methodology].boundary_stability). Every HYBRID
+# (driving, punchy, warm) has an explicit, non-empty negative pool (see
+# [methodology].hybrid_negative_sets). spare-003 is the renamed former sparse-001 (its id now
+# matches its labels=["spare"]); it also serves as a dense/busy-negative anchor via neg_labels.
+# -----------------------------------------------------------------------------
+
+# ---- bright <-> dark (spectral_centroid_hz) ----
+[[clip]]
+id = "bright-001"
+path = "corpus/clips/bright-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library (e.g. Freesound CC0 / cctrax / archive.org CC)"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["bright"]
+neg_labels = ["dark", "warm"]
+
+[[clip]]
+id = "bright-002"
+path = "corpus/clips/bright-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = ["bright", "busy"]
+neg_labels = ["dark", "warm"]
+
+[[clip]]
+id = "dark-001"
+path = "corpus/clips/dark-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["dark", "warm"]
+neg_labels = ["bright"]
+
+[[clip]]
+id = "dark-002"
+path = "corpus/clips/dark-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["dark"]
+neg_labels = ["bright"]
+
+# ---- loud <-> quiet (rms_dbfs) ----
+[[clip]]
+id = "loud-001"
+path = "corpus/clips/loud-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["loud"]
+neg_labels = ["quiet"]
+
+[[clip]]
+id = "loud-002"
+path = "corpus/clips/loud-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 7.0
+labels = ["loud", "compressed"]
+neg_labels = ["quiet", "dynamic"]
+
+[[clip]]
+id = "quiet-001"
+path = "corpus/clips/quiet-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = ["quiet"]
+neg_labels = ["loud", "driving"]
+
+[[clip]]
+id = "quiet-002"
+path = "corpus/clips/quiet-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 12.0
+labels = ["quiet", "spare"]
+neg_labels = ["loud", "busy"]
+
+# ---- compressed <-> dynamic (crest_factor_db) ----
+[[clip]]
+id = "compressed-001"
+path = "corpus/clips/compressed-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["compressed"]
+neg_labels = ["dynamic", "punchy"]
+
+[[clip]]
+id = "compressed-002"
+path = "corpus/clips/compressed-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["compressed", "loud"]
+neg_labels = ["dynamic", "punchy"]
+
+[[clip]]
+id = "dynamic-001"
+path = "corpus/clips/dynamic-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 12.0
+labels = ["dynamic"]
+neg_labels = ["compressed"]
+
+[[clip]]
+id = "dynamic-002"
+path = "corpus/clips/dynamic-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 11.0
+labels = ["dynamic", "punchy"]
+neg_labels = ["compressed"]
+
+# ---- busy <-> spare (onset_rate_hz) ----
+[[clip]]
+id = "busy-001"
+path = "corpus/clips/busy-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["busy"]
+neg_labels = ["spare"]
+
+[[clip]]
+id = "busy-002"
+path = "corpus/clips/busy-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 7.0
+labels = ["busy", "dense"]
+neg_labels = ["spare"]
+
+[[clip]]
+id = "spare-001"
+path = "corpus/clips/spare-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 12.0
+labels = ["spare"]
+neg_labels = ["busy", "dense"]
+
+[[clip]]
+id = "spare-002"
+path = "corpus/clips/spare-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = ["spare", "quiet"]
+neg_labels = ["busy", "loud", "driving"]
+
+# ---- dense <-> sparse (onset_rate_hz AND spectral_bandwidth_hz; two axes, see
+#      [methodology].dense_two_axis) ----
+[[clip]]
+id = "dense-001"
+path = "corpus/clips/dense-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["dense", "busy"]
+neg_labels = ["spare"]
+
+[[clip]]
+id = "dense-002"
+path = "corpus/clips/dense-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["dense"]
+neg_labels = ["spare"]
+
+# spare-003 (renamed from sparse-001 so its id matches labels=["spare"]); doubles as the
+# onset-sparse dense/busy-negative anchor via neg_labels.
+[[clip]]
+id = "spare-003"
+path = "corpus/clips/spare-003.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 12.0
+labels = ["spare"]
+neg_labels = ["dense", "busy"]
+
+# BLOCKER-1 anchor: busy-but-NARROW-band negative. High onset_rate (a busy POSITIVE) but a
+# NARROW spectral_bandwidth, so it is a dense-NEGATIVE that separates the bandwidth axis
+# (which every onset-sparse dense-negative cannot). See [methodology].dense_two_axis.
+[[clip]]
+id = "dense-neg-narrowband-001"
+path = "corpus/clips/dense-neg-narrowband-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["busy"]
+neg_labels = ["dense"]
+
+# ---- driving (hybrid: onset_rate_hz + tempo_bpm + rms_dbfs) ----
+[[clip]]
+id = "driving-001"
+path = "corpus/clips/driving-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = ["driving", "busy", "loud"]
+neg_labels = ["spare", "quiet"]
+
+[[clip]]
+id = "driving-002"
+path = "corpus/clips/driving-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["driving"]
+neg_labels = ["spare"]
+
+# ---- punchy (hybrid: crest_factor_db + onset_rate_hz) ----
+[[clip]]
+id = "punchy-001"
+path = "corpus/clips/punchy-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 8.0
+labels = ["punchy", "dynamic"]
+neg_labels = ["compressed"]
+
+[[clip]]
+id = "punchy-002"
+path = "corpus/clips/punchy-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 7.0
+labels = ["punchy", "busy"]
+neg_labels = ["spare"]
+
+# ---- warm (hybrid: spectral_centroid_hz + mfcc_low_mid; also low-centroid exemplars) ----
+[[clip]]
+id = "warm-001"
+path = "corpus/clips/warm-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = ["warm", "dark"]
+neg_labels = ["bright"]
+
+[[clip]]
+id = "warm-002"
+path = "corpus/clips/warm-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 9.0
+labels = ["warm"]
+neg_labels = ["bright"]
+
+# ---- cosmic (advisory; >=1 required) ----
+[[clip]]
+id = "cosmic-001"
+path = "corpus/clips/cosmic-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 12.0
+labels = ["cosmic"]
+neg_labels = ["busy", "driving"]
+
+[[clip]]
+id = "cosmic-002"
+path = "corpus/clips/cosmic-002.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 11.0
+labels = ["cosmic", "spare"]
+neg_labels = ["busy", "dense"]
+
+# ---- neutral control (fires nothing — global all-negative anchor, incl. all hybrids) ----
+[[clip]]
+id = "neutral-001"
+path = "corpus/clips/neutral-001.wav"
+sha256 = "TBD"
+source = "TBD — CC0/CC-BY library"
+license = "TBD (CC0 or CC-BY only)"
+duration_s = 10.0
+labels = []
+neg_labels = ["bright", "dark", "loud", "quiet", "compressed", "dynamic", "busy", "spare", "dense", "driving", "punchy", "warm"]
