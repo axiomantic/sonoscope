@@ -13,6 +13,14 @@ Design invariants honored here:
   ``dc_offset_exceeds`` fires when ``|dc_offset| > 0.001`` (linear full scale);
   ``is_silent`` fires when RMS is at/below the frozen
   ``silence_threshold_dbfs = -80.0``.
+- **Two silence predicates, one threshold.** ``is_silent`` is the OR-combined
+  dead-channel tripwire (ANY channel at/below the cutoff). ``all_channels_silent``
+  is the AND-combined whole-file predicate (EVERY channel at/below it) and is what
+  gates descriptor interpretation — a stereo file with one dead channel is a
+  broken channel, not a silent file, and must keep its descriptors. Both read the
+  SAME ``SILENCE_THRESHOLD_DBFS``, so the two can never drift apart. A channel
+  whose RMS is non-finite (NaN/Inf) is a fault, not silence, and is False under
+  both.
 - **Multi-channel combine (I5).** Every check runs per channel, then combines:
   boolean flags are the **OR** across channels; counts are the **SUM** across
   channels (``clip_fraction`` = summed ``clip_count`` / total samples over all
@@ -95,6 +103,10 @@ def compute_integrity(audio: np.ndarray) -> IntegrityBlock:
     has_inf = False
     has_denormal = False
     is_silent = False
+    # AND-combined companion to ``is_silent``. Seeded True and ANDed per channel;
+    # the degenerate zero-channel case cannot reach here (guarded above), so this
+    # is never vacuously True.
+    all_channels_silent = True
     dc_offset_exceeds = False
     clip_count = 0
 
@@ -115,8 +127,11 @@ def compute_integrity(audio: np.ndarray) -> IntegrityBlock:
         # Silence: RMS at/below -80 dBFS (by design). A non-finite RMS
         # (NaN/Inf present) is not silence.
         rms_lin = float(np.sqrt(np.mean(np.square(x, dtype=np.float64))))
-        if np.isfinite(rms_lin):
-            is_silent |= _dbfs(rms_lin) <= SILENCE_THRESHOLD_DBFS
+        channel_silent = bool(
+            np.isfinite(rms_lin) and _dbfs(rms_lin) <= SILENCE_THRESHOLD_DBFS
+        )
+        is_silent |= channel_silent
+        all_channels_silent &= channel_silent
 
         # DC offset: channel mean magnitude past the linear-full-scale cutoff.
         dc = float(np.mean(x, dtype=np.float64))
@@ -127,6 +142,7 @@ def compute_integrity(audio: np.ndarray) -> IntegrityBlock:
 
     return IntegrityBlock(
         is_silent=is_silent,
+        all_channels_silent=all_channels_silent,
         silence_threshold_dbfs=SILENCE_THRESHOLD_DBFS,
         has_nan=has_nan,
         has_inf=has_inf,

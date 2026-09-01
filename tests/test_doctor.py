@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from subprocess import CompletedProcess
+from types import SimpleNamespace
 
 from sonoscope import cli, doctor
 from sonoscope.perception.null_adapter import NullAdapter
@@ -290,3 +291,35 @@ def test_doctor_latency_skipped_when_corpus_manifest_malformed(monkeypatch):
     )
     assert report.latencies == ()
     assert report.exit_code == int(ExitCode.OK)
+
+
+def test_latency_bench_warms_up_before_timing(monkeypatch):
+    """RED-proving: the reported latency must be the WARM steady state, not a cold
+    first call. Measured here: the first ``compute_summary`` in a process costs
+    ~2.2 s (librosa/scipy/sklearn import + numba JIT) against a 0.500 s target,
+    while every later call costs ~0.03 s — so an unwarmed bench warns on every
+    clean machine.
+
+    Asserting on wall-clock seconds would be flaky and would not pin the
+    behaviour, so the warm-up is made observable instead: a fake
+    ``compute_summary`` counts its invocations. Exactly two calls (one warm-up +
+    one timed) is the fix; RED against the unwarmed code, which calls it once."""
+    calls: list[tuple[int, int]] = []
+
+    def _fake_compute_summary(audio, sample_rate):
+        calls.append((len(audio), sample_rate))
+        return None
+
+    monkeypatch.setattr(doctor, "compute_summary", _fake_compute_summary)
+    monkeypatch.setattr(
+        doctor.corpus,
+        "list_items",
+        lambda: (SimpleNamespace(kind="signal", path="signals/impulse_2s.wav"),),
+    )
+    monkeypatch.setattr(doctor, "_load_wav", lambda _wav_path: ([0.0, 0.0], 48000))
+
+    measured = doctor._measure_latencies(Path("/nonexistent"))
+
+    assert len(calls) == 2
+    assert calls == [(2, 48000), (2, 48000)]
+    assert list(measured) == ["deterministic_feature_extraction"]

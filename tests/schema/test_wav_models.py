@@ -34,7 +34,7 @@ from tests.schema.test_models import REPORT
 
 def test_schema_version_bumped_to_1_4_0():
     # Additive wav-analysis kind + input_provenance (MINOR bump; major stays 1).
-    assert SCHEMA_VERSION == "1.4.0"
+    assert SCHEMA_VERSION == "1.5.0"
 
 
 def _provenance(**overrides) -> InputProvenance:
@@ -121,7 +121,7 @@ def test_wav_chunk_analysis_full_object_round_trips(make_wav_chunk):
     assert reloaded == chunk
     # kind + schema_version defaults are stamped on every element.
     assert reloaded.kind == "wav-chunk-analysis"
-    assert reloaded.schema_version == "1.4.0"
+    assert reloaded.schema_version == "1.5.0"
 
 
 def test_wav_analysis_report_roundtrips_single_and_multi_chunk(make_wav_chunk):

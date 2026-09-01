@@ -28,9 +28,14 @@ from sonoscope.iterate import (
 from sonoscope.schema import ExitCode
 from sonoscope.schema.models import (
     AnalysisReport,
+    AnalyzedWindow,
     DescriptorsBlock,
     DescriptorsLibrary,
+    DeterministicBlock,
+    InputProvenance,
     MeasuredDescriptor,
+    WavAnalysisReport,
+    WavChunkAnalysis,
 )
 
 
@@ -873,4 +878,285 @@ def test_positive_value_tolerance_suppresses_drift(tmp_path, capsys):
     assert captured.out == (
         '{"added":["dense"],"removed":[],"direction_changed":["bright"],'
         '"value_drift":[]}\n'
+    )
+
+
+# --- Item 4: wav-path (JSON ARRAY) reports are diffed CHUNK-WISE -------------
+#
+# ``analyze --wav`` emits a WavAnalysisReport (a JSON ARRAY of WavChunkAnalysis,
+# one entry per chunk), not a single AnalysisReport. iterate-descriptors accepts
+# both shapes: two arrays are compared chunk i vs chunk i and emit the distinct
+# ``{"chunk_count":N,"chunks":[...]}`` object; a chunk-count mismatch and a mixed
+# array/single pair are typed InputErrors (exit 2), never a partial comparison.
+
+
+def _wav_chunk(block: DescriptorsBlock, *, chunk_index: int, n_chunks: int):
+    """One ``WavChunkAnalysis`` carrying ``block`` (descriptors is REQUIRED there)."""
+    return WavChunkAnalysis(
+        generated_at="2026-07-09T12:00:00Z",
+        sonoscope_version="0.1.0",
+        input_provenance=InputProvenance(
+            original_sample_rate=44100,
+            n_channels=1,
+            source_subtype="PCM_16",
+            resample_res_type="soxr_hq",
+            soxr_version="1.1.0",
+            analyzed_window=AnalyzedWindow(
+                native_offset_samples=0,
+                native_length_samples=44100,
+                native_sample_rate=44100,
+                analyzed_samples_48k=48000,
+            ),
+            max_chunk_seconds=600.0,
+            chunk_index=chunk_index,
+            n_chunks=n_chunks,
+        ),
+        deterministic=DeterministicBlock.model_validate(
+            deepcopy(_BASE_REPORT["deterministic"])
+        ),
+        descriptors=block,
+    )
+
+
+def _write_wav_report(tmp_path, name: str, blocks: list[DescriptorsBlock]) -> str:
+    report = WavAnalysisReport(
+        [
+            _wav_chunk(b, chunk_index=i, n_chunks=len(blocks))
+            for i, b in enumerate(blocks)
+        ]
+    )
+    p = tmp_path / name
+    p.write_text(report.model_dump_json(), encoding="utf-8")
+    return str(p)
+
+
+def _bright_loud(bright_direction: str, loud_value: float) -> DescriptorsBlock:
+    return _block(
+        [
+            MeasuredDescriptor(
+                term="bright", value=3000.0, metric="c", direction=bright_direction
+            ),
+            MeasuredDescriptor(
+                term="loud", value=loud_value, metric="r", direction="high"
+            ),
+        ]
+    )
+
+
+def test_wav_array_reports_diff_chunkwise(tmp_path, capsys):
+    """RED before the fix: two wav-path reports exit 2 (DESCRIPTORS_REPORT_INVALID).
+
+    After the fix they exit 0 and emit the chunk-wise diff object.
+    """
+    baseline = _write_wav_report(
+        tmp_path,
+        "baseline.json",
+        [_bright_loud("high", -12.0), _bright_loud("high", -20.0)],
+    )
+    candidate = _write_wav_report(
+        tmp_path,
+        "candidate.json",
+        [
+            _block(
+                [
+                    MeasuredDescriptor(
+                        term="bright", value=3000.0, metric="c", direction="low"
+                    ),
+                    MeasuredDescriptor(
+                        term="loud", value=-9.5, metric="r", direction="high"
+                    ),
+                    MeasuredDescriptor(
+                        term="dense", value=9.0, metric="o", direction="high"
+                    ),
+                ]
+            ),
+            _bright_loud("high", -20.0),
+        ],
+    )
+    code = cli.main(
+        [
+            "iterate-descriptors",
+            "--baseline",
+            baseline,
+            "--candidate",
+            candidate,
+            "--value-tolerance",
+            "0.5",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.OK)
+    assert json.loads(captured.out) == {
+        "chunk_count": 2,
+        "chunks": [
+            {
+                "chunk_index": 0,
+                "added": ["dense"],
+                "removed": [],
+                "direction_changed": ["bright"],
+                "value_drift": [
+                    {
+                        "term": "loud",
+                        "baseline_value": -12.0,
+                        "candidate_value": -9.5,
+                    }
+                ],
+            },
+            {
+                "chunk_index": 1,
+                "added": [],
+                "removed": [],
+                "direction_changed": [],
+                "value_drift": [],
+            },
+        ],
+    }
+
+
+def test_wav_array_reports_chunkwise_line_is_byte_exact(tmp_path, capsys):
+    """The chunk-wise line is single-line compact strict JSON (byte-exact)."""
+    baseline = _write_wav_report(tmp_path, "baseline.json", [_bright_loud("high", -12.0)])
+    candidate = _write_wav_report(tmp_path, "candidate.json", [_bright_loud("low", -12.0)])
+    code = cli.main(
+        ["iterate-descriptors", "--baseline", baseline, "--candidate", candidate]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.OK)
+    assert captured.out == (
+        '{"chunk_count":1,"chunks":[{"chunk_index":0,"added":[],"removed":[],'
+        '"direction_changed":["bright"],"value_drift":[]}]}\n'
+    )
+
+
+def test_wav_array_chunk_count_mismatch_is_input_error(tmp_path, capsys):
+    baseline = _write_wav_report(
+        tmp_path,
+        "baseline.json",
+        [_bright_loud("high", -12.0), _bright_loud("high", -20.0)],
+    )
+    candidate = _write_wav_report(tmp_path, "candidate.json", [_bright_loud("high", -12.0)])
+    code = cli.main(
+        ["iterate-descriptors", "--baseline", baseline, "--candidate", candidate]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.INPUT)
+    payload = json.loads(captured.out)
+    assert payload["error"] == {
+        "code": "DESCRIPTORS_CHUNK_COUNT_MISMATCH",
+        "message": (
+            "iterate-descriptors requires equal chunk counts to diff wav-path "
+            "reports chunk-wise; baseline has 2 chunks, candidate has 1"
+        ),
+        "detail": {
+            "reason": "chunk_count_mismatch",
+            "baseline_chunks": 2,
+            "candidate_chunks": 1,
+        },
+        "severity": "fatal",
+        "component": "analyze",
+    }
+
+
+def test_mixed_array_baseline_single_candidate_is_input_error(tmp_path, capsys):
+    baseline = _write_wav_report(tmp_path, "baseline.json", [_bright_loud("high", -12.0)])
+    candidate = _write_report(tmp_path, "candidate.json", _bright_loud("high", -12.0))
+    code = cli.main(
+        ["iterate-descriptors", "--baseline", baseline, "--candidate", candidate]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.INPUT)
+    payload = json.loads(captured.out)
+    assert payload["error"] == {
+        "code": "DESCRIPTORS_REPORT_SHAPE_MISMATCH",
+        "message": (
+            "iterate-descriptors cannot compare a wav-path chunk array against a "
+            "single analysis report; baseline is wav-chunk-array, candidate is "
+            "analysis-report. Produce both reports from the same analyze path."
+        ),
+        "detail": {
+            "reason": "shape_mismatch",
+            "baseline_shape": "wav-chunk-array",
+            "candidate_shape": "analysis-report",
+        },
+        "severity": "fatal",
+        "component": "analyze",
+    }
+
+
+def test_mixed_single_baseline_array_candidate_is_input_error(tmp_path, capsys):
+    baseline = _write_report(tmp_path, "baseline.json", _bright_loud("high", -12.0))
+    candidate = _write_wav_report(tmp_path, "candidate.json", [_bright_loud("high", -12.0)])
+    code = cli.main(
+        ["iterate-descriptors", "--baseline", baseline, "--candidate", candidate]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.INPUT)
+    payload = json.loads(captured.out)
+    assert payload["error"] == {
+        "code": "DESCRIPTORS_REPORT_SHAPE_MISMATCH",
+        "message": (
+            "iterate-descriptors cannot compare a wav-path chunk array against a "
+            "single analysis report; baseline is analysis-report, candidate is "
+            "wav-chunk-array. Produce both reports from the same analyze path."
+        ),
+        "detail": {
+            "reason": "shape_mismatch",
+            "baseline_shape": "analysis-report",
+            "candidate_shape": "wav-chunk-array",
+        },
+        "severity": "fatal",
+        "component": "analyze",
+    }
+
+
+def test_single_report_pair_output_unchanged_by_array_support(tmp_path, capsys):
+    """GREEN (no regression): the two-single-report path stays byte-identical."""
+    baseline = _write_report(
+        tmp_path,
+        "baseline.json",
+        _block(
+            [
+                MeasuredDescriptor(
+                    term="bright", value=3000.0, metric="c", direction="high"
+                ),
+                MeasuredDescriptor(
+                    term="loud", value=-12.0, metric="r", direction="high"
+                ),
+            ]
+        ),
+    )
+    candidate = _write_report(
+        tmp_path,
+        "candidate.json",
+        _block(
+            [
+                MeasuredDescriptor(
+                    term="loud", value=-9.5, metric="r", direction="high"
+                ),
+                MeasuredDescriptor(
+                    term="dense", value=9.0, metric="o", direction="high"
+                ),
+                MeasuredDescriptor(
+                    term="bright", value=3000.0, metric="c", direction="low"
+                ),
+            ]
+        ),
+    )
+    code = cli.main(
+        [
+            "iterate-descriptors",
+            "--baseline",
+            baseline,
+            "--candidate",
+            candidate,
+            "--value-tolerance",
+            "0.5",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == int(ExitCode.OK)
+    assert captured.out == (
+        '{"added":["dense"],"removed":[],"direction_changed":["bright"],'
+        '"value_drift":[{"term":"loud","baseline_value":-12.0,'
+        '"candidate_value":-9.5}]}\n'
     )

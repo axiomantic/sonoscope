@@ -58,23 +58,23 @@ A `--spec` bundles the stimulus and the param-set. Point `analyze` at a built pl
 ```bash
 uv run sonoscope analyze \
   --plugin "/Library/Audio/Plug-Ins/VST3/Surge XT.vst3" \
-  --spec specs/example.json
+  --spec specs/surge_lowpass_open.json
 ```
 
 It renders the audio and prints a versioned analysis report (trimmed):
 
 ```json
 {
-  "schema_version": "1.4.0",
+  "schema_version": "1.5.0",
   "deterministic": {
     "summary": {
       "rms_dbfs": -22.03,
       "peak_dbfs": -13.69,
       "spectral_centroid_hz": 2809.06,
       "spectral_flatness": 0.00051,
-      "onset_count": 1
+      "onset_count": 0
     },
-    "integrity": { "is_silent": false, "has_nan": false, "clip_count": 0 }
+    "integrity": { "is_silent": false, "all_channels_silent": false, "has_nan": false, "clip_count": 0 }
   },
   "tripwires": {
     "expected_audio": true,
@@ -97,7 +97,7 @@ signal is never reported as faked-pristine. Output is a JSON array, one entry pe
 ```json
 [
   {
-    "schema_version": "1.4.0",
+    "schema_version": "1.5.0",
     "kind": "wav-chunk-analysis",
     "input_provenance": {
       "original_sample_rate": 44100,
@@ -116,7 +116,7 @@ signal is never reported as faked-pristine. Output is a JSON array, one entry pe
 
 ```
 sonoscope doctor:
-  [OK  ] pins: 5 pinned dependencies match
+  [OK  ] pins: 6 pinned dependencies match
   [OK  ] lockfile: uv.lock in sync
   [OK  ] surge_xt: Surge XT install + factory content verified
   [OK  ] backend: backend pedalboard-vst3 v0.9.23 loaded
@@ -129,10 +129,10 @@ sonoscope doctor:
 - **Plugin hosting**: renders VST3 via [pedalboard](https://github.com/spotify/pedalboard) and CLAP via a bundled C host — real audio, not simulation.
 - **Honest-provenance WAV analysis**: `analyze --wav` analyzes existing files at native rate, resamples the slice to 48 kHz, and records source rate/subtype/resampler in an `input_provenance` block — never faked-pristine.
 - **Spec-driven matrix**: one JSON `--spec` pins the stimulus, param-set, and patch class; swap specs to sweep params and stimuli reproducibly.
-- **Versioned analysis JSON**: a schema-versioned (`1.4.0`), extra-forbidding pydantic report — stable enough to diff, regression-test, and feed to an LLM.
+- **Versioned analysis JSON**: a schema-versioned (`1.5.0`), extra-forbidding pydantic report — stable enough to diff, regression-test, and feed to an LLM.
 - **Deterministic feature ground truth**: [librosa](https://librosa.org/)-backed RMS/peak, spectral centroid/flatness/rolloff, onsets, tempo, and MFCCs, plus NaN/Inf/clip/DC integrity flags.
 - **PASS/RED tripwires**: silent-output, NaN/Inf, denormal, and clipping checks that turn "did it break?" into a machine-readable verdict.
-- **Noise-floor-gated iterate**: compare a baseline vs. candidate on one metric (`iterate`) or on descriptor terms (`iterate-descriptors`), gated against measured nondeterminism floors — no chasing noise.
+- **Noise-floor-gated iterate**: compare a baseline vs. candidate on one metric (`iterate`) or on descriptor terms (`iterate-descriptors`), gated against measured nondeterminism floors — no chasing noise. `iterate-descriptors` takes both report shapes: two plugin-path reports diff as one object, two wav-path reports diff **chunk-wise** (chunk counts must match).
 - **Optional Qwen2-Audio perception**: opt-in, clearly-labelled *advisory* natural-language descriptions, never treated as ground truth.
 
 ## Documentation

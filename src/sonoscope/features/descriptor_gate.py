@@ -61,8 +61,12 @@ AUDIO_GATE_ELIGIBLE_TERMS: frozenset[str] = frozenset(
         "spare",
         "dense",
         "rhythmic-density",
+        # Emitted alone when the integrity layer reports the whole file silent.
+        # Gate-eligible so an operator can assert either polarity ("this render
+        # must be silent", "this render must not be silent").
+        "silent",
     }
-)  # 10; tempo-audio EXCLUDED (estimated=True)
+)  # tempo-audio EXCLUDED (estimated=True)
 
 MIDI_GATE_ELIGIBLE_TERMS: frozenset[str] = frozenset(
     {

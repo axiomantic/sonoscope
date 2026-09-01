@@ -28,7 +28,7 @@ def test_schema_version_bumped_to_1_4_0():
     # Additive descriptor_gate field (1.3.0), then additive wav-analysis kind +
     # input_provenance (1.4.0); MINOR bumps, major stays 1 so
     # check_schema_version is unaffected.
-    assert SCHEMA_VERSION == "1.4.0"
+    assert SCHEMA_VERSION == "1.5.0"
 
 
 def test_descriptor_gate_result_round_trip():

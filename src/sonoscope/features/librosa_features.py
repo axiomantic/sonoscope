@@ -15,8 +15,11 @@ Design invariants honored here:
   channels; ``peak_dbfs`` reduces by **max** (a true peak, never an average).
 - **Octave-error mitigation.** ``tempo_bpm`` is emitted only with enough onsets
   AND a plausible BPM; otherwise it is ``None`` with a machine-readable note.
-  ``tempo_confidence`` records the mitigation outcome. Never a confident wrong
-  BPM.
+  ``tempo_confidence`` is emitted only alongside a ``tempo_bpm``, and is a
+  measured 0-1 periodicity strength — the normalised autocorrelation of the
+  onset-strength envelope at the lag implied by ``tempo_bpm`` — not a gate-pass
+  marker. Sustained and noise material therefore scores near 0, exact-periodic
+  material near 1, and confidence falls monotonically with timing jitter.
 """
 
 from __future__ import annotations
@@ -42,6 +45,13 @@ FROZEN_PARAMS: dict[str, int | float | str | bool] = {
     "center": True,
     "roll_percent": 0.85,
     "silence_threshold_dbfs": -80.0,
+    # Absolute peak-picking threshold on the UN-normalised onset envelope.
+    # ``onset_strength`` uses ``power_to_db(ref=np.max)``, so the raw envelope is
+    # amplitude-invariant and an absolute delta discriminates signal STRUCTURE,
+    # not level. Normalising first (the librosa default) rescales a sustained
+    # tone's noise floor to [0,1] and makes any delta fire on it.
+    "onset_delta": 10.0,
+    "onset_normalize": False,
 }
 
 # --- Octave-error-mitigation gates + machine-readable notes -----------------
@@ -105,6 +115,32 @@ def _dbfs(linear: float) -> float:
     return 20.0 * float(np.log10(max(linear, _AMPLITUDE_FLOOR)))
 
 
+def _tempo_confidence(
+    onset_env: np.ndarray, bpm: float, sample_rate: int, hop: int
+) -> float:
+    """Periodicity strength at ``bpm``, in [0, 1] (by design).
+
+    Normalised autocorrelation of the mean-removed onset-strength envelope,
+    linearly interpolated at the exact fractional lag implied by ``bpm``.
+    Returns 0.0 when no periodicity is measurable.
+    """
+    if bpm is None or bpm <= 0.0:
+        return 0.0
+    env = onset_env - onset_env.mean()
+    if not np.any(env):
+        return 0.0
+    ac = librosa.autocorrelate(env, max_size=len(env))
+    if ac[0] <= 0.0:
+        return 0.0
+    ac = ac / ac[0]
+    lag = (60.0 / bpm) * sample_rate / hop
+    if lag < 1.0 or lag >= len(ac) - 1:
+        return 0.0
+    i = int(np.floor(lag))
+    frac = lag - i
+    return float(np.clip(ac[i] * (1.0 - frac) + ac[i + 1] * frac, 0.0, 1.0))
+
+
 def compute_summary(audio: np.ndarray, sample_rate: int) -> SummaryResult:
     """Compute ``deterministic.summary`` from a wav array (by design).
 
@@ -140,6 +176,8 @@ def compute_summary(audio: np.ndarray, sample_rate: int) -> SummaryResult:
     window = FROZEN_PARAMS["window"]
     center = FROZEN_PARAMS["center"]
     roll_percent = FROZEN_PARAMS["roll_percent"]
+    onset_delta = FROZEN_PARAMS["onset_delta"]
+    onset_normalize = FROZEN_PARAMS["onset_normalize"]
 
     duration_s = n_samples / float(sample_rate)
 
@@ -156,6 +194,7 @@ def compute_summary(audio: np.ndarray, sample_rate: int) -> SummaryResult:
     mfcc_std_ch: list[np.ndarray] = []
     onset_counts: list[int] = []
     tempo_ch: list[float] = []
+    onset_env_ch: list[np.ndarray] = []
 
     for c in range(n_channels):
         y = np.ascontiguousarray(channels[c], dtype=np.float32)
@@ -201,15 +240,23 @@ def compute_summary(audio: np.ndarray, sample_rate: int) -> SummaryResult:
         mfcc_mean_ch.append(np.nan_to_num(np.mean(mfcc, axis=1)))
         mfcc_std_ch.append(np.nan_to_num(np.std(mfcc, axis=1)))
 
-        # Rhythm features.
+        # Rhythm features. The onset envelope is computed once and reused for
+        # both detection and the tempo confidence (verified bit-identical to
+        # letting onset_detect derive it from ``y``).
+        onset_env = librosa.onset.onset_strength(
+            y=y, sr=sample_rate, hop_length=hop,
+        )
         onsets = librosa.onset.onset_detect(
-            y=y, sr=sample_rate, hop_length=hop, units="frames",
+            onset_envelope=onset_env, sr=sample_rate, hop_length=hop,
+            units="frames", delta=onset_delta, normalize=onset_normalize,
         )
         onset_counts.append(int(len(onsets)))
         tempo = librosa.beat.beat_track(
             y=y, sr=sample_rate, hop_length=hop,
         )[0]
-        tempo_ch.append(float(np.atleast_1d(tempo)[0]))
+        bpm = float(np.atleast_1d(tempo)[0])
+        tempo_ch.append(bpm)
+        onset_env_ch.append(onset_env)
 
     # --- Reductions across channels (I5) ------------------------------------
     peak_dbfs = _dbfs(max(peak_lin_ch))  # max across channels (true peak)
@@ -232,9 +279,14 @@ def compute_summary(audio: np.ndarray, sample_rate: int) -> SummaryResult:
         notes.append(NOTE_TEMPO_IMPLAUSIBLE)
     else:
         tempo_bpm = tempo_candidate
-        # Passed both mitigation gates. tempo_confidence encodes the mitigation
-        # outcome as a gate-pass marker (1.0); suppression yields None.
-        tempo_confidence = 1.0
+        # Passed both mitigation gates: measure the periodicity strength at the
+        # REPORTED BPM -- not at each channel's own beat_track BPM, which for
+        # disagreeing channels is a tempo the reported value never equals --
+        # then reduce by mean across channels (I5). Suppression yields None.
+        tempo_confidence = float(np.mean([
+            _tempo_confidence(env, tempo_candidate, sample_rate, hop)
+            for env in onset_env_ch
+        ]))
 
     summary = DeterministicSummary(
         duration_s=float(duration_s),

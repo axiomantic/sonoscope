@@ -393,7 +393,9 @@ def _analyze_chunk(
         integrity=integrity,
         notes=summary_result.notes,
     )
-    descriptors = derive_descriptors(summary_result.summary)
+    descriptors = derive_descriptors(
+        summary_result.summary, is_silent=integrity.all_channels_silent
+    )
     descriptor_gate: Optional[DescriptorGateResult] = None
     if expectation is not None:
         evaluation = evaluate_descriptors(descriptors, expectation, block_kind="audio")

@@ -294,6 +294,11 @@ def _measure_latencies(repo_root: Path) -> dict[str, float]:
         # guard let it escape and crash doctor. Broadening to ``ValueError`` degrades
         # gracefully (skip the latency bench) on a malformed manifest too.
         return {}
+    # Warm-up, NOT redundant work: the first call in a process pays a one-time
+    # ~2.2 s of librosa/scipy/sklearn import + numba JIT — over the 0.500 s target
+    # on its own, so an unwarmed bench warns on every clean machine. The target
+    # measures the steady state (~0.03 s), so warm before timing.
+    compute_summary(audio, sample_rate)
     start = time.perf_counter()
     compute_summary(audio, sample_rate)
     elapsed = time.perf_counter() - start

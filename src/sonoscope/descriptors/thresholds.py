@@ -18,7 +18,11 @@ import hashlib
 import json
 from collections.abc import Mapping
 
-DERIVER_VERSION = "1.0.0"
+# 1.1.0: descriptor emission is gated on whole-file silence. An INTERPRETATION
+# change, so it bumps this version and NOT thresholds_sha256 — the gate adds no
+# threshold value, and an interpretation change must never masquerade as a
+# measurement change.
+DERIVER_VERSION = "1.1.0"
 
 # Flat, dotted, JSON-serialisable leaves only (int|float|str|bool) so the
 # digest is stable and changes iff a value changes. CALIBRATION-PENDING (C1.5).

@@ -441,7 +441,9 @@ def analyze_render_outcome(
 
     # DESCRIPTORS — measured/hybrid deriver runs ALWAYS and NEVER depends on
     # advisory or perception status (pure, deterministic).
-    descriptors = derive_descriptors(summary)
+    descriptors = derive_descriptors(
+        summary, is_silent=deterministic.integrity.all_channels_silent
+    )
 
     # Advisory is best-effort; failure degrades to measured-only, exit 0.
     # produce_advisory returns (advisory, coverage, dropped, err).

@@ -69,7 +69,11 @@ from sonoscope.schema import (
     IterateDirection,
 )
 from sonoscope.schema.generate import SCHEMA_KINDS, json_schema_for
-from sonoscope.schema.models import AnalysisReport, DescriptorGateResult
+from sonoscope.schema.models import (
+    AnalysisReport,
+    DescriptorGateResult,
+    WavAnalysisReport,
+)
 from sonoscope.spec import Spec
 from sonoscope.wav_orchestrator import (
     AudioSlice,
@@ -117,6 +121,17 @@ DESCRIPTORS_NO_BLOCK = "DESCRIPTORS_NO_BLOCK"
 # we fail loud (never a fabricated/empty diff). The ``side`` key names which of the
 # two report inputs failed. Descriptors are an analysis-domain artifact -> "analyze".
 DESCRIPTORS_REPORT_INVALID = "DESCRIPTORS_REPORT_INVALID"
+
+# iterate-descriptors accepts BOTH report shapes: the plugin-path single
+# ``AnalysisReport`` (a JSON object) and the wav-path ``WavAnalysisReport`` (a JSON
+# ARRAY of per-chunk analyses). Two arrays are diffed CHUNK-WISE (chunk i vs chunk i),
+# which needs equal chunk counts; unequal counts would force a silent truncation to
+# the shorter list, so they are a hard INPUT error (exit 2) naming BOTH counts. A
+# MIXED pair (one array, one object) is not comparable at all — a single report has no
+# chunk axis to align against — so it is its own distinct INPUT error rather than a
+# guess. Both are analysis-domain -> component "analyze".
+DESCRIPTORS_CHUNK_COUNT_MISMATCH = "DESCRIPTORS_CHUNK_COUNT_MISMATCH"
+DESCRIPTORS_REPORT_SHAPE_MISMATCH = "DESCRIPTORS_REPORT_SHAPE_MISMATCH"
 
 # --- analyze-midi (C2) typed input errors ------------------------------------
 # All are INPUT-contract violations (component "midi") -> InputError, exit 2.
@@ -580,14 +595,25 @@ def build_parser() -> argparse.ArgumentParser:
             "saved to a JSON file). Emits a single-line JSON object: the regression set "
             "(added/removed/direction_changed terms) plus a tolerance-banded value-drift "
             "advisory sub-list. Added/removed/direction changes are the regression signal; "
-            "raw value drift is expected across renders and is banded by --value-tolerance."
+            "raw value drift is expected across renders and is banded by --value-tolerance. "
+            "Wav-path reports ('analyze --wav' emits a JSON array of per-chunk analyses) "
+            "are compared CHUNK-WISE: chunk i vs chunk i, emitting "
+            "{\"chunk_count\":N,\"chunks\":[...]}. The chunk counts must match, and both "
+            "reports must come from the same analyze path; either mismatch is a hard "
+            "input error (exit 2), never a partial comparison."
         ),
         epilog=(
             "Example (two-invocation workflow):\n"
             "  sonoscope analyze --plugin 'Surge XT.vst3' --spec base.json > baseline.json\n"
             "  sonoscope analyze --plugin 'Surge XT.vst3' --spec cand.json > candidate.json\n"
             "  sonoscope iterate-descriptors --baseline baseline.json \\\n"
-            "    --candidate candidate.json --value-tolerance 0.5"
+            "    --candidate candidate.json --value-tolerance 0.5\n"
+            "\n"
+            "Example (wav path, compared chunk-wise):\n"
+            "  sonoscope analyze --wav before.wav > baseline.json\n"
+            "  sonoscope analyze --wav after.wav > candidate.json\n"
+            "  sonoscope iterate-descriptors --baseline baseline.json \\\n"
+            "    --candidate candidate.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -795,19 +821,25 @@ def _load_spec(
 
 def _load_report(
     path: Optional[str], *, side: Literal["baseline", "candidate"]
-) -> AnalysisReport:
-    """Load + validate an on-disk :class:`AnalysisReport` JSON (A5, iterate-descriptors).
+) -> AnalysisReport | WavAnalysisReport:
+    """Load + validate an on-disk analysis report JSON (A5, iterate-descriptors).
 
-    Models :func:`_load_spec`: read bytes, then ``AnalysisReport.model_validate_json``.
-    Every failure is a hard :class:`InputError` (exit 2), never a silent skip:
+    Accepts BOTH report shapes the ``analyze`` command emits:
+
+    - a JSON **object** -> the plugin-path :class:`AnalysisReport`;
+    - a JSON **array** -> the wav-path :class:`WavAnalysisReport` (one entry per
+      chunk). Dispatch is on the parsed JSON's own top-level type, so the shape is
+      never guessed and a malformed array still fails loud.
+
+    Models :func:`_load_spec`: read bytes, parse, then validate. Every failure is a
+    hard :class:`InputError` (exit 2), never a silent skip:
 
     - an unreadable/missing path -> ``detail["reason"] == "unreadable"``;
-    - non-JSON bytes OR valid-JSON-that-is-not-an-``AnalysisReport`` (both surface as
-      a pydantic ``ValidationError`` from ``model_validate_json``) ->
-      ``detail["reason"] == "invalid_report"``.
+    - non-JSON bytes, or valid JSON that is neither a valid ``AnalysisReport`` nor a
+      valid ``WavAnalysisReport`` -> ``detail["reason"] == "invalid_report"``.
 
     ``side`` (``"baseline"``/``"candidate"``) is echoed into ``detail`` so a caller can
-    tell which of the two report inputs failed. ``AnalysisReport`` is imported read-only
+    tell which of the two report inputs failed. Both models are imported read-only
     from the frozen schema.
 
     A missing flag is a USAGE error, not an INPUT error: ``--baseline`` /
@@ -835,7 +867,19 @@ def _load_report(
             component="analyze",
         ) from exc
     try:
-        return AnalysisReport.model_validate_json(raw)
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise InputError(
+            DESCRIPTORS_REPORT_INVALID,
+            f"{side} report is not valid JSON: {p}: {exc}",
+            detail={"reason": "invalid_report", "side": side, "path": str(p)},
+            component="analyze",
+        ) from exc
+    model: type[AnalysisReport] | type[WavAnalysisReport] = (
+        WavAnalysisReport if isinstance(parsed, list) else AnalysisReport
+    )
+    try:
+        return model.model_validate(parsed)
     except ValidationError as exc:
         raise InputError(
             DESCRIPTORS_REPORT_INVALID,
@@ -1545,14 +1589,14 @@ def _sanitize_finite(value: float) -> Optional[float]:
     return value if math.isfinite(value) else None
 
 
-def _descriptor_diff_json_line(diff: DescriptorTermDiff) -> str:
-    """Serialize a :class:`DescriptorTermDiff` to the exact single-line strict-JSON form.
+def _descriptor_diff_payload(diff: DescriptorTermDiff) -> dict:
+    """The JSON-ready mapping for one :class:`DescriptorTermDiff` (one report pair,
+    or one chunk pair in the wav-path chunk-wise form).
 
-    Non-finite drift values are sanitized to ``null`` BEFORE ``allow_nan=False`` dumping,
-    so the line is always a valid JSON document. Compact separators produce the byte-exact
-    single-line contract the tests pin.
+    Non-finite drift values are sanitized to ``None`` HERE so every emitter below can
+    dump with ``allow_nan=False`` and still produce a valid JSON document.
     """
-    payload = {
+    return {
         "added": diff.added,
         "removed": diff.removed,
         "direction_changed": diff.direction_changed,
@@ -1565,18 +1609,61 @@ def _descriptor_diff_json_line(diff: DescriptorTermDiff) -> str:
             for d in diff.value_drift
         ],
     }
+
+
+def _descriptor_diff_json_line(diff: DescriptorTermDiff) -> str:
+    """Serialize a single-report :class:`DescriptorTermDiff` to the exact single-line
+    strict-JSON form. Compact separators produce the byte-exact contract the tests pin.
+    """
+    return json.dumps(
+        _descriptor_diff_payload(diff), separators=(",", ":"), allow_nan=False
+    )
+
+
+def _descriptor_chunkwise_diff_json_line(diffs: list[DescriptorTermDiff]) -> str:
+    """Serialize the wav-path CHUNK-WISE diff to its single-line strict-JSON form.
+
+    Shape (deliberately distinct from the single-report line so a consumer can tell
+    the two apart STRUCTURALLY, not by guessing)::
+
+        {"chunk_count":N,"chunks":[{"chunk_index":0,"added":[],...},...]}
+
+    ``chunks[i]`` carries the same four diff keys as the single-report object plus its
+    own ``chunk_index``, mirroring how :func:`aggregate_gate` attributes cross-chunk
+    findings per chunk index. ``chunk_count`` equals ``len(chunks)`` and equals the
+    (necessarily equal) chunk count of both input reports.
+    """
+    payload = {
+        "chunk_count": len(diffs),
+        "chunks": [
+            {"chunk_index": i, **_descriptor_diff_payload(diff)}
+            for i, diff in enumerate(diffs)
+        ],
+    }
     return json.dumps(payload, separators=(",", ":"), allow_nan=False)
 
 
 def _run_iterate_descriptors(args: argparse.Namespace) -> int:
     """`iterate-descriptors` engine (A5): baseline vs candidate report -> term diff.
 
-    Loads two on-disk :class:`AnalysisReport` JSONs (baseline first, then candidate)
-    via :func:`_load_report`; a missing/unparseable/wrong-shape report is a typed
-    :class:`InputError` (exit 2) naming the failing ``side``. A report that parses but
-    carries NO descriptors block is a distinct ``DESCRIPTORS_NO_BLOCK`` INPUT error
-    (also naming the side). Otherwise it runs the pure :func:`diff_descriptor_terms`
-    and prints the single-line strict-JSON diff to stdout (exit 0).
+    Loads two on-disk reports (baseline first, then candidate) via
+    :func:`_load_report`; a missing/unparseable/wrong-shape report is a typed
+    :class:`InputError` (exit 2) naming the failing ``side``. Both report shapes the
+    ``analyze`` command emits are accepted, and the two must AGREE on shape:
+
+    - two single :class:`AnalysisReport` objects (plugin path) -> the one-object diff
+      line. A report that parses but carries NO descriptors block is a distinct
+      ``DESCRIPTORS_NO_BLOCK`` INPUT error (also naming the side); this guard is
+      reachable only here, because ``AnalysisReport.descriptors`` is Optional while
+      ``WavChunkAnalysis.descriptors`` is REQUIRED by the schema.
+    - two :class:`WavAnalysisReport` arrays (wav path) -> chunk i is diffed against
+      chunk i for EVERY i and the chunk-wise object is emitted. Unequal chunk counts
+      are ``DESCRIPTORS_CHUNK_COUNT_MISMATCH`` rather than a truncated comparison.
+    - a MIXED pair -> ``DESCRIPTORS_REPORT_SHAPE_MISMATCH``; the shapes have no common
+      alignment, so guessing one would be wrong.
+
+    The pure :func:`diff_descriptor_terms` does the work in every case, and the result
+    is printed as one strict-JSON line on stdout (exit 0).
     """
     # PR review: ``--value-tolerance`` bands value-drift as ``abs(delta) > tol`` in
     # ``diff_descriptor_terms``. A non-finite (nan/inf) or negative tol silently
@@ -1591,6 +1678,52 @@ def _run_iterate_descriptors(args: argparse.Namespace) -> int:
         )
     baseline = _load_report(args.baseline, side="baseline")
     candidate = _load_report(args.candidate, side="candidate")
+
+    base_is_wav = isinstance(baseline, WavAnalysisReport)
+    cand_is_wav = isinstance(candidate, WavAnalysisReport)
+    if base_is_wav != cand_is_wav:
+        base_shape = "wav-chunk-array" if base_is_wav else "analysis-report"
+        cand_shape = "wav-chunk-array" if cand_is_wav else "analysis-report"
+        raise InputError(
+            DESCRIPTORS_REPORT_SHAPE_MISMATCH,
+            "iterate-descriptors cannot compare a wav-path chunk array against a "
+            f"single analysis report; baseline is {base_shape}, candidate is "
+            f"{cand_shape}. Produce both reports from the same analyze path.",
+            detail={
+                "reason": "shape_mismatch",
+                "baseline_shape": base_shape,
+                "candidate_shape": cand_shape,
+            },
+            component="analyze",
+        )
+
+    if isinstance(baseline, WavAnalysisReport) and isinstance(
+        candidate, WavAnalysisReport
+    ):
+        base_chunks = baseline.root
+        cand_chunks = candidate.root
+        if len(base_chunks) != len(cand_chunks):
+            raise InputError(
+                DESCRIPTORS_CHUNK_COUNT_MISMATCH,
+                "iterate-descriptors requires equal chunk counts to diff wav-path "
+                f"reports chunk-wise; baseline has {len(base_chunks)} chunks, "
+                f"candidate has {len(cand_chunks)}",
+                detail={
+                    "reason": "chunk_count_mismatch",
+                    "baseline_chunks": len(base_chunks),
+                    "candidate_chunks": len(cand_chunks),
+                },
+                component="analyze",
+            )
+        diffs = [
+            diff_descriptor_terms(
+                b.descriptors, c.descriptors, value_tolerance=args.value_tolerance
+            )
+            for b, c in zip(base_chunks, cand_chunks)
+        ]
+        print(_descriptor_chunkwise_diff_json_line(diffs))
+        return int(ExitCode.OK)
+
     if baseline.descriptors is None:
         raise InputError(
             DESCRIPTORS_NO_BLOCK,

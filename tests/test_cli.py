@@ -62,7 +62,7 @@ def test_unknown_command_exits_usage(capsys):
     # `message` is argparse-generated (version-dependent); every other field
     # of the fatal envelope is asserted by exact equality.
     assert payload["kind"] == "fatal-error"
-    assert payload["schema_version"] == "1.4.0"  # SCHEMA_VERSION bump (wav-analysis + input_provenance)
+    assert payload["schema_version"] == "1.5.0"  # SCHEMA_VERSION bump (all_channels_silent)
     assert payload["error"]["code"] == "USAGE_INVALID_ARGS"
     assert payload["error"]["severity"] == "fatal"
     assert payload["error"]["component"] == "cli"
@@ -84,7 +84,7 @@ def test_fatal_envelope_shape(monkeypatch, capsys):
     assert code == 3
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
-        "schema_version": "1.4.0",  # SCHEMA_VERSION bump (wav-analysis + input_provenance)
+        "schema_version": "1.5.0",  # SCHEMA_VERSION bump (all_channels_silent)
         "kind": "fatal-error",
         "generated_at": "2026-07-04T12:00:00Z",
         "sonoscope_version": "0.1.0",

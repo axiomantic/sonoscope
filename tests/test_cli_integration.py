@@ -110,7 +110,7 @@ def test_analyze_wav_emits_report_array(tmp_path, capsys):
     assert isinstance(payload, list)
     assert len(payload) == 1
     assert payload[0]["kind"] == "wav-chunk-analysis"
-    assert payload[0]["schema_version"] == "1.4.0"
+    assert payload[0]["schema_version"] == "1.5.0"
     assert payload[0]["input_provenance"]["original_sample_rate"] == 44100
 
 

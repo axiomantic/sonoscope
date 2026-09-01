@@ -517,6 +517,13 @@ def test_every_audio_eligible_term_is_emittable() -> None:
     emitted: set[str] = set()
     for s in (s_high, s_low):
         emitted |= {d.term for d in derive_descriptors(s).measured if not d.estimated}
+    # ``silent`` is reachable only through the whole-file-silence gate, which
+    # suppresses every other term, so it needs its own pass.
+    emitted |= {
+        d.term
+        for d in derive_descriptors(s_low, is_silent=True).measured
+        if not d.estimated
+    }
     assert emitted == set(AUDIO_GATE_ELIGIBLE_TERMS)
 
 

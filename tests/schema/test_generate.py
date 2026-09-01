@@ -51,7 +51,7 @@ def test_analysis_schema_carries_schema_version_property():
     # 1.1.0 -> 1.2.0 (additive descriptors block), 1.2.0 -> 1.3.0 (additive
     # descriptor_gate field), and 1.3.0 -> 1.4.0 (additive wav-analysis kind +
     # input_provenance).
-    assert schema["properties"]["schema_version"]["default"] == "1.4.0"
+    assert schema["properties"]["schema_version"]["default"] == "1.5.0"
 
 
 def test_unknown_kind_rejected():

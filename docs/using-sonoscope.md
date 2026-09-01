@@ -113,7 +113,7 @@ Real output (to **stderr**):
 
 ```
 sonoscope doctor:
-  [OK  ] pins: 5 pinned dependencies match
+  [OK  ] pins: 6 pinned dependencies match
   [OK  ] lockfile: uv.lock in sync
   [OK  ] surge_xt: Surge XT install + factory content verified
   [OK  ] backend: backend pedalboard-vst3 v0.9.23 loaded
@@ -130,7 +130,7 @@ uv run sonoscope doctor --json
 
 ```json
 { "kind": "doctor", "ok": true,
-  "checks": [ {"name":"pins","severity":"ok","detail":"5 pinned dependencies match"}, ... ],
+  "checks": [ {"name":"pins","severity":"ok","detail":"6 pinned dependencies match"}, ... ],
   "latencies": [ {"metric":"deterministic_feature_extraction","measured_s":1.31,"target_s":0.5,"over_target":true} ] }
 ```
 
@@ -195,8 +195,8 @@ Real slice:
 }
 "deterministic": {
   "summary": {"rms_dbfs": -22.03, "peak_dbfs": -13.69, "spectral_centroid_hz": 2809.06,
-              "spectral_flatness": 0.00051, "onset_count": 1, ...},
-  "integrity": {"is_silent": false, "has_nan": false, "clip_count": 0, ...}
+              "spectral_flatness": 0.00051, "onset_count": 0, ...},
+  "integrity": {"is_silent": false, "all_channels_silent": false, "has_nan": false, "clip_count": 0, ...}
 }
 ```
 
@@ -257,7 +257,7 @@ Real output (a mono 44.1 kHz PCM_16 file, whole-file, no slice) — the report i
 ```json
 [
   {
-    "schema_version": "1.4.0",
+    "schema_version": "1.5.0",
     "kind": "wav-chunk-analysis",
     "input_provenance": {
       "original_sample_rate": 44100,
@@ -826,7 +826,7 @@ not hand-written:
   "summary": "measured: bright, loud, busy, driving, 9.0 onsets/s, 128 BPM; advisory: cosmic, hypnotic",
   "library": {
     "thresholds_sha256": "8a30a4cb477803982949d7cb9f4f22a6c5980241c626e6a9d2e2e39325bcd3d3",
-    "deriver_version": "1.0.0",
+    "deriver_version": "1.1.0",
     "advisory_coverage": 1.0,
     "advisory_dropped": 0
   }
@@ -1037,6 +1037,33 @@ excluded — its raw value is expected to churn) and is deliberately block-kind-
 agnostic: it *observes* rather than *asserts*, so it does not re-apply the gate's
 eligibility rules. A missing/unparseable report, or one with no `descriptors`
 block, is a typed `INPUT` error (**exit 2**) naming the failing `side`.
+
+**Wav-path reports are compared chunk-wise.** `analyze --wav` emits a JSON **array**
+of per-chunk analyses (§4.9), not a single report object, so `iterate-descriptors`
+diffs chunk *i* of the baseline against chunk *i* of the candidate and emits a
+distinct object carrying the chunk count. **Real output** (`tone_1k_2s.wav` vs
+`logsweep_20-20k_2s.wav`, both split with `--max-chunk-seconds 1`):
+
+```bash
+sonoscope analyze --wav tone_1k_2s.wav --max-chunk-seconds 1 > baseline.json
+sonoscope analyze --wav logsweep_20-20k_2s.wav --max-chunk-seconds 1 > candidate.json
+sonoscope iterate-descriptors --baseline baseline.json --candidate candidate.json
+```
+
+```json
+{"chunk_count":2,"chunks":[{"chunk_index":0,"added":["dark"],"removed":[],"direction_changed":[],"value_drift":[{"term":"compressed","baseline_value":3.0103000393168733,"candidate_value":3.010172407266505},{"term":"loud","baseline_value":-9.030899952596497,"candidate_value":-9.030772320546129}]},{"chunk_index":1,"added":["bright"],"removed":[],"direction_changed":[],"value_drift":[{"term":"compressed","baseline_value":3.0103000393168733,"candidate_value":3.01079372647082},{"term":"loud","baseline_value":-9.030899952596497,"candidate_value":-9.031393639750444}]}]}
+```
+
+Each `chunks[i]` carries the same four diff keys as the single-report form plus its
+own `chunk_index`, so the two output shapes are distinguishable structurally rather
+than by guesswork. Two constraints follow, and both fail loud (**exit 2**) instead of
+comparing part of the data:
+
+- **The chunk counts must match** — `DESCRIPTORS_CHUNK_COUNT_MISMATCH`, whose `detail`
+  names both counts. Truncating to the shorter report would silently drop chunks.
+- **Both reports must come from the same `analyze` path** — mixing a wav-path array
+  with a plugin-path single report is `DESCRIPTORS_REPORT_SHAPE_MISMATCH`. The two
+  shapes have no common chunk axis to align on.
 
 ---
 

@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
-SCHEMA_VERSION = "1.4.0"  # bumped from 1.3.0; additive/minor (wav-analysis kind + input_provenance)
+SCHEMA_VERSION = "1.5.0"  # bumped from 1.4.0; additive/minor (IntegrityBlock.all_channels_silent)
 
 # --- Enums / literal aliases (design sections 3.2-3.6) ----------------------
 
@@ -177,7 +177,14 @@ class DeterministicSummary(_Strict):
 
 
 class IntegrityBlock(_Strict):
+    #: OR-combined across channels: ANY channel at/below the silence cutoff.
+    #: The dead-channel tripwire.
     is_silent: bool
+    #: AND-combined across channels at the SAME cutoff: EVERY channel silent.
+    #: This is the whole-file predicate that gates descriptor interpretation;
+    #: ``is_silent`` alone would strip descriptors from a stereo file that has
+    #: one dead channel and one channel of real audio.
+    all_channels_silent: bool = False
     silence_threshold_dbfs: float
     has_nan: bool
     has_inf: bool

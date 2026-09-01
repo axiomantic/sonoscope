@@ -41,4 +41,4 @@ def test_digest_reexported_via_pins():
 
 
 def test_deriver_version_pinned():
-    assert DERIVER_VERSION == "1.0.0"
+    assert DERIVER_VERSION == "1.1.0"

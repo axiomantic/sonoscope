@@ -569,3 +569,128 @@ def test_emission_order_measured_then_dense_then_readouts() -> None:
     )
     terms = [m.term for m in derive_descriptors(s).measured]
     assert terms == ["bright", "busy", "dense", "rhythmic-density", "tempo-audio"]
+
+
+# --- Digital-silence gate (whole-file silence suppresses interpretation) ------
+#
+# The gate input is the integrity layer's whole-file silence predicate, passed in
+# explicitly to keep the deriver pure and to keep ONE definition of silence. The
+# RED case below is a digital-silence summary: before the gate existed it emitted
+# the timbral adjectives "dark, quiet, compressed" plus the hybrid "warm"
+# composed from the MFCCs of nothing.
+
+
+def _digital_silence_summary():
+    """Summary of an all-zeros buffer, as compute_summary actually reports it."""
+    return _summary(
+        rms_dbfs=-240.0,
+        peak_dbfs=-240.0,
+        crest_factor_db=0.0,
+        dc_offset=0.0,
+        spectral_centroid_hz=0.0,
+        spectral_bandwidth_hz=0.0,
+        spectral_rolloff_hz=0.0,
+        spectral_flatness=0.0,
+        zero_crossing_rate=0.0,
+        onset_count=0,
+        onset_rate_hz=0.0,
+        tempo_bpm=None,
+        tempo_confidence=None,
+        mfcc_mean=[0.0] * 13,
+        mfcc_std=[0.0] * 13,
+    )
+
+
+def test_silence_gate_emits_only_the_silent_term() -> None:
+    # RED before the gate: measured == [dark, quiet, compressed] and
+    # hybrid == [warm], summary "measured: dark, quiet, compressed, warm".
+    block = derive_descriptors(_digital_silence_summary(), is_silent=True)
+    assert block.measured == [
+        MeasuredDescriptor(
+            term="silent",
+            value=-240.0,
+            metric="rms_dbfs",
+            direction="low",
+            threshold=None,
+            estimated=False,
+            confidence=None,
+        )
+    ]
+    assert block.hybrid == []
+    assert block.advisory == []
+    assert block.summary == "measured: silent"
+
+
+def test_silence_gate_suppresses_hybrid_for_an_otherwise_firing_summary() -> None:
+    # Proves the gate suppresses by the FLAG, not by the silent summary's values:
+    # this summary fires driving + punchy + several measured terms on its own.
+    s = _summary(
+        onset_rate_hz=10.0,
+        tempo_bpm=140.0,
+        tempo_confidence=0.9,
+        onset_count=20,
+        rms_dbfs=-10.0,
+        crest_factor_db=16.0,
+        spectral_bandwidth_hz=2500.0,
+    )
+    assert [m.term for m in derive_descriptors(s).measured] == [
+        "loud",
+        "dynamic",
+        "busy",
+        "dense",
+        "rhythmic-density",
+        "tempo-audio",
+    ]
+    assert [h.term for h in derive_descriptors(s).hybrid] == ["driving", "punchy"]
+
+    gated = derive_descriptors(s, is_silent=True)
+    assert gated.measured == [
+        MeasuredDescriptor(
+            term="silent",
+            value=-10.0,
+            metric="rms_dbfs",
+            direction="low",
+            threshold=None,
+            estimated=False,
+            confidence=None,
+        )
+    ]
+    assert gated.hybrid == []
+    assert gated.summary == "measured: silent"
+
+
+def test_silence_gate_does_not_fire_for_a_normal_signal() -> None:
+    # GREEN: is_silent=False leaves a normal signal's descriptors untouched, and
+    # the default (flag omitted) is identical to passing False.
+    s = _summary(
+        spectral_centroid_hz=3000.0,
+        onset_rate_hz=9.0,
+        spectral_bandwidth_hz=2500.0,
+        tempo_bpm=120.0,
+        tempo_confidence=0.9,
+        onset_count=8,
+    )
+    assert derive_descriptors(s, is_silent=False) == derive_descriptors(s)
+    block = derive_descriptors(s, is_silent=False)
+    assert [m.term for m in block.measured] == [
+        "bright",
+        "busy",
+        "dense",
+        "rhythmic-density",
+        "tempo-audio",
+    ]
+    assert [h.term for h in block.hybrid] == ["driving"]
+    assert (
+        block.summary
+        == "measured: bright, busy, dense, driving, 9.0 onsets/s, 120 BPM"
+    )
+
+
+def test_silence_gate_still_stamps_the_library() -> None:
+    block = derive_descriptors(_digital_silence_summary(), is_silent=True)
+    assert block.library == DescriptorsLibrary(
+        thresholds_sha256=thresholds_sha256(),
+        deriver_version=DERIVER_VERSION,
+        advisory_coverage=None,
+        advisory_dropped=None,
+    )

@@ -6,6 +6,7 @@ uv lockfile must be in sync. Drift is a hard fail.
 """
 
 import importlib.metadata as importlib_metadata
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,21 @@ import pytest
 from sonoscope.pins import PINNED_VERSIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _pinned_index_env() -> dict[str, str]:
+    """Env that makes ``uv`` resolve against PyPI regardless of local uv config.
+
+    The committed lockfile records ``https://pypi.org/simple`` URLs. A developer
+    machine configured against a mirror (``~/.config/uv/uv.toml``) makes
+    ``uv lock --check`` report drift for the mirror's URLs alone, so without
+    this the test asserts the local uv config rather than the lockfile.
+    """
+    return {
+        **os.environ,
+        "UV_NO_CONFIG": "1",
+        "UV_DEFAULT_INDEX": "https://pypi.org/simple",
+    }
 
 
 def test_runtime_versions_match_pins():
@@ -30,6 +46,7 @@ def test_lockfile_not_drifted():
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        env=_pinned_index_env(),
     )
     assert result.returncode == 0, result.stderr
 

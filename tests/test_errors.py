@@ -68,7 +68,7 @@ def test_error_renders_fatal_envelope():
     )
     assert isinstance(fatal, FatalError)
     assert fatal.model_dump() == {
-        "schema_version": "1.4.0",  # SCHEMA_VERSION bump (wav-analysis + input_provenance)
+        "schema_version": "1.5.0",  # SCHEMA_VERSION bump (all_channels_silent)
         "kind": "fatal-error",
         "generated_at": "2026-07-04T12:00:00Z",
         "sonoscope_version": "0.1.0",

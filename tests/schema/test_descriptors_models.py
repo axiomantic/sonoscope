@@ -67,7 +67,7 @@ DESCRIPTORS = {
     "summary": "measured: bright, 128 BPM, driving; advisory: cosmic",
     "library": {
         "thresholds_sha256": "a" * 64,
-        "deriver_version": "1.0.0",
+        "deriver_version": "1.1.0",
         "advisory_coverage": 0.5,
         "advisory_dropped": 2,
     },

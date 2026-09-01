@@ -262,3 +262,74 @@ def test_is_silent_or_combines_across_channels():
     dead = np.zeros(tone.size, dtype=np.float32)
     stereo = np.stack([dead, tone])  # (2, n)
     assert compute_integrity(stereo).is_silent is True
+
+
+# --- Whole-file silence (AND-combined, distinct from the OR tripwire) --------
+#
+# ``is_silent`` OR-combines: it fires when ANY channel is dead, which is the
+# right dead-channel tripwire but the wrong descriptor gate. ``all_channels_silent``
+# AND-combines over the SAME ``SILENCE_THRESHOLD_DBFS``, so it means "the whole
+# file is silent". The stereo case below is the one that separates them.
+
+
+def test_all_channels_silent_mono_zeros():
+    silence = np.zeros(4800, dtype=np.float32)
+    result = compute_integrity(silence)
+    assert result.is_silent is True
+    assert result.all_channels_silent is True
+
+
+def test_all_channels_silent_false_for_a_tone():
+    result = compute_integrity(_tone())
+    assert result.is_silent is False
+    assert result.all_channels_silent is False
+
+
+def test_all_channels_silent_and_combines_one_dead_channel():
+    # THE distinguishing case: one dead channel + one full-scale tone. The OR
+    # tripwire fires (a channel is broken); the whole-file predicate must NOT,
+    # or a stereo file with one dead channel would lose every descriptor.
+    tone = _tone(amp=1.0)
+    dead = np.zeros(tone.size, dtype=np.float32)
+    stereo = np.stack([dead, tone])  # (2, n)
+    result = compute_integrity(stereo)
+    assert result.is_silent is True
+    assert result.all_channels_silent is False
+
+
+def test_all_channels_silent_stereo_both_dead():
+    dead = np.zeros(4800, dtype=np.float32)
+    stereo = np.stack([dead, dead])  # (2, n)
+    result = compute_integrity(stereo)
+    assert result.is_silent is True
+    assert result.all_channels_silent is True
+
+
+def test_all_channels_silent_false_for_nan_buffer():
+    # A NaN-filled buffer has a non-finite RMS. That is a fault, not silence:
+    # the AND-combine must not report the file wholly silent.
+    nan_buf = np.full(4800, np.float32(np.nan), dtype=np.float32)
+    result = compute_integrity(nan_buf)
+    assert result.has_nan is True
+    assert result.all_channels_silent is False
+
+
+def test_all_channels_silent_false_when_one_channel_is_nan_and_one_is_dead():
+    # NaN channel + dead channel: the OR tripwire fires on the dead channel, but
+    # the non-finite channel is not silence, so the whole-file predicate is False.
+    dead = np.zeros(4800, dtype=np.float32)
+    nan_ch = np.full(4800, np.float32(np.nan), dtype=np.float32)
+    result = compute_integrity(np.stack([nan_ch, dead]))
+    assert result.is_silent is True
+    assert result.all_channels_silent is False
+
+
+def test_all_channels_silent_reuses_the_frozen_silence_threshold():
+    # Both predicates read the SAME frozen cutoff; a level just above it is not
+    # silence under either. -79 dBFS constant channel: |x| = 10**(-79/20).
+    amp = np.float32(10.0 ** (-79.0 / 20.0))
+    channel = np.full(4800, amp, dtype=np.float32)
+    result = compute_integrity(channel)
+    assert result.silence_threshold_dbfs == SILENCE_THRESHOLD_DBFS
+    assert result.is_silent is False
+    assert result.all_channels_silent is False

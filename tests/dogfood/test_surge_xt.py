@@ -119,6 +119,21 @@ def loop() -> _LoopResult:
 
     # H1 MINOR-2 latency (§7.2): time a single 2 s render (render_2s) and a single
     # deterministic-only analyze (render + features == deterministic_analyze).
+    # Both are warmed first: the first render in a process pays the Surge XT VST3
+    # scan + JUCE init, and the first analyze pays ~2.2 s of librosa/scipy/sklearn
+    # import + numba JIT. The targets measure the steady state, not that one-time
+    # cost, so an unwarmed timing warns on every machine. Warm-up results are
+    # discarded; the acceptance assertions below read the timed (warm) ones.
+    render(open_spec, _SURGE_XT_VST3, backend)
+    analyze_plugin_spec(
+        open_spec,
+        _SURGE_XT_VST3,
+        backend,
+        spec_sha256="dogfood-open-warmup",
+        spec_ref="specs/surge_lowpass_open.json",
+        perception_enabled=False,
+    )
+
     t0 = time.perf_counter()
     seed_outcome = render(open_spec, _SURGE_XT_VST3, backend)
     render_2s_s = time.perf_counter() - t0

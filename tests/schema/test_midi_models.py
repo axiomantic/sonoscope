@@ -258,7 +258,7 @@ def test_midi_input_file_source_consistency():
 
 
 def test_schema_version_bumped():
-    assert SCHEMA_VERSION == "1.4.0"
+    assert SCHEMA_VERSION == "1.5.0"
 
 
 def test_component_includes_midi():
@@ -294,4 +294,4 @@ def test_generate_midi_analysis_kind():
     assert set(schema["properties"].keys()) == set(
         MidiAnalysisReport.model_fields.keys()
     )
-    assert schema["properties"]["schema_version"]["default"] == "1.4.0"
+    assert schema["properties"]["schema_version"]["default"] == "1.5.0"

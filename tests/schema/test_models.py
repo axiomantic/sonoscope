@@ -124,6 +124,7 @@ REPORT = {
         },
         "integrity": {
             "is_silent": False,
+            "all_channels_silent": False,
             "silence_threshold_dbfs": -80.0,
             "has_nan": False,
             "has_inf": False,
@@ -243,9 +244,9 @@ def test_schema_version_constant():
     # Bumped 1.0.0 -> 1.1.0 (additive midi-analysis kind, S1), then
     # 1.1.0 -> 1.2.0 (additive descriptors block), then
     # 1.2.0 -> 1.3.0 (additive descriptor_gate field), then
-    # 1.3.0 -> 1.4.0 (additive wav-analysis kind + input_provenance); major
+    # 1.4.0 -> 1.5.0 (additive IntegrityBlock.all_channels_silent); major
     # stays 1 so check_schema_version is unaffected.
-    assert SCHEMA_VERSION == "1.4.0"
+    assert SCHEMA_VERSION == "1.5.0"
 
 
 def test_report_roundtrips_reference_json():

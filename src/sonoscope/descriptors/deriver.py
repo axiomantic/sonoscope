@@ -16,6 +16,12 @@ Boundary-operator asymmetry (by design, intentional — do NOT harmonize):
 measured gated terms fire with strict ``>``/``<`` (at-threshold = no fire);
 hybrid feel-terms fire with inclusive ``>=`` (at-threshold = fire).
 
+Digital silence short-circuits the whole deriver: when the caller passes
+``is_silent=True`` (the integrity layer's whole-file verdict) the output is the
+single measured term ``silent`` and nothing else. Without that gate the timbral
+terms fire on the absence of signal — an all-zeros buffer reads as "dark, quiet,
+compressed, warm", the last of those a hybrid composed from the MFCCs of nothing.
+
 ``spare`` requires positive onset activity (``0 < onset_rate_hz < max``): a
 fully silent clip (``onset_rate_hz == 0.0``) is not "sparse" but empty, mirroring
 the same-rationale suppression of the ``rhythmic-density`` readout at zero. This
@@ -243,8 +249,53 @@ def _hybrid(summary: DeterministicSummary) -> list[HybridDescriptor]:
     return rows
 
 
-def derive_descriptors(summary: DeterministicSummary) -> DescriptorsBlock:
-    """Pure deriver: DeterministicSummary -> DescriptorsBlock (by design)."""
+def _silent_block(summary: DeterministicSummary) -> DescriptorsBlock:
+    """The whole-file-silent output: exactly one measured term, no hybrids.
+
+    ``threshold`` is None because the gate is NOT a deriver threshold — it is the
+    integrity layer's frozen silence cutoff, and copying that value here would be
+    the second source of truth this design exists to avoid. ``value`` reports the
+    observed level for the reader; nothing in this function compares it.
+    """
+    measured = [
+        MeasuredDescriptor(
+            term="silent",
+            value=summary.rms_dbfs,
+            metric="rms_dbfs",
+            direction="low",
+            threshold=None,
+        )
+    ]
+    return DescriptorsBlock(
+        measured=measured,
+        hybrid=[],
+        advisory=[],
+        summary=render_summary(measured, [], []),
+        library=DescriptorsLibrary(
+            thresholds_sha256=thresholds_sha256(),
+            deriver_version=DERIVER_VERSION,
+        ),
+    )
+
+
+def derive_descriptors(
+    summary: DeterministicSummary, *, is_silent: bool = False
+) -> DescriptorsBlock:
+    """Pure deriver: DeterministicSummary -> DescriptorsBlock (by design).
+
+    ``is_silent`` is the integrity layer's WHOLE-FILE silence verdict
+    (``IntegrityBlock.all_channels_silent``), passed in rather than recomputed:
+    ``summary.rms_dbfs`` is the mean across channels, so re-deriving silence here
+    would create a second, subtly different definition that could drift from the
+    integrity layer's. The caller owns the predicate; this function stays pure.
+
+    When it is set, the file has no signal to interpret, so every measured and
+    hybrid term is suppressed in favour of the single ``silent`` term. The
+    suppressed terms are not merely absent — an empty list would be
+    indistinguishable from a deriver that failed to run.
+    """
+    if is_silent:
+        return _silent_block(summary)
     measured = _measured(summary)
     hybrid = _hybrid(summary)
     library = DescriptorsLibrary(

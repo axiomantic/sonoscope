@@ -39,7 +39,7 @@ def test_analyze_wav_emits_json_array(tmp_path, capsys):
     assert len(payload) == 1
     chunk = payload[0]
     assert chunk["kind"] == "wav-chunk-analysis"
-    assert chunk["schema_version"] == "1.4.0"
+    assert chunk["schema_version"] == "1.5.0"
     assert chunk["sonoscope_version"] == __version__
     p = chunk["input_provenance"]
     assert p["original_sample_rate"] == 44100

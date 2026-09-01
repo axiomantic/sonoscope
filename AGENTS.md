@@ -76,6 +76,13 @@ Green-mirage test discipline, expressed in pytest:
 
 - **Python 3.12 comes from uv**, not necessarily on `PATH` as `python3.12`. Use `uv run` /
   `uv sync`; do not assume a system interpreter.
+- **A mirror-configured uv silently rewrites `uv.lock`.** If `~/.config/uv/uv.toml`
+  points at a local index (e.g. proxpi), a plain `uv run` rewrites every registry URL
+  in the committed, fully-hashed `uv.lock` to the mirror — no error, no output, just a
+  dirty tree. Pins are law, so committing that is a real defect. Prefix uv commands
+  with `UV_NO_CONFIG=1 UV_DEFAULT_INDEX=https://pypi.org/simple`, and check
+  `git status --porcelain uv.lock` is empty before committing; restore with
+  `git checkout -- uv.lock` (that exact path, never a bare `.`).
 - **MPS lacks float64.** Keep deterministic analysis on CPU / librosa; the model path may use
   MPS but validate MPS-vs-CPU numerics and keep a CPU fallback.
 - **pedalboard has no CLAP loader** — it hosts a wrapped VST3/AU, which is why sonoscope
